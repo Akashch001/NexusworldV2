@@ -1,0 +1,47 @@
+/* NexusWorld Typography Architecture Tokens */
+:root {
+  --font-display: 'Space Grotesk', -apple-system, sans-serif;
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+
+  /* Mathematical Fluid Typographic Scale */
+  --text-hero: clamp(2.75rem, 6vw + 1rem, 5.5rem);
+  --text-h1: clamp(2.25rem, 4.5vw + 0.5rem, 4rem);
+  --text-h2: clamp(1.75rem, 3vw + 0.5rem, 2.75rem);
+  --text-h3: clamp(1.25rem, 2vw + 0.25rem, 1.75rem);
+  --text-body: clamp(0.875rem, 1vw + 0.25rem, 1.0625rem);
+  --text-caption: 0.75rem;
+  --text-telemetry: 0.6875rem;
+
+  --letter-spacing-tight: -0.035em;
+  --letter-spacing-normal: -0.01em;
+  --letter-spacing-wide: 0.08em;
+  --letter-spacing-widest: 0.22em;
+}
+
+.font-display {
+  font-family: var(--font-display);
+  letter-spacing: var(--letter-spacing-tight);
+}
+
+.font-sans {
+  font-family: var(--font-sans);
+  letter-spacing: var(--letter-spacing-normal);
+}
+
+.font-mono {
+  font-family: var(--font-mono);
+}
+
+.text-hero {
+  font-size: var(--text-hero);
+  line-height: 1.04;
+  letter-spacing: var(--letter-spacing-tight);
+}
+
+.text-telemetry {
+  font-family: var(--font-mono);
+  font-size: var(--text-telemetry);
+  letter-spacing: var(--letter-spacing-wide);
+  text-transform: uppercase;
+}
