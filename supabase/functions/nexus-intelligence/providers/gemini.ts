@@ -2,7 +2,7 @@ import { AIProvider, AIRequest, AIResponse } from './provider.ts';
 
 export class GeminiProvider implements AIProvider {
   private apiKey: string;
-  private model = 'gemini-3.6-flash';
+  private model = 'gemini-1.5-flash';
   private endpoint: string;
 
   constructor(apiKey: string) {
@@ -58,7 +58,18 @@ export class GeminiProvider implements AIProvider {
       });
 
       if (response.status === 429) {
-        console.warn('Gemini 429 received. Backing off 3s before retry...');
+        const clonedResponse = response.clone();
+        let errorText = '';
+        try {
+           errorText = await clonedResponse.text();
+        } catch (_) {}
+
+        if (errorText.toLowerCase().includes('quota')) {
+          console.error('Gemini 429 QUOTA EXHAUSTED:', errorText);
+          throw new Error('QUOTA_EXHAUSTED');
+        }
+
+        console.warn('Gemini 429 rate limit received. Backing off 3s before retry...');
         await new Promise(r => setTimeout(r, 3000));
         response = await fetch(this.endpoint, {
           method: 'POST',

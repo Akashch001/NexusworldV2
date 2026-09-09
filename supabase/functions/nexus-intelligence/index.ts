@@ -514,6 +514,17 @@ ${uiContextText}`;
     );
   } catch (error: any) {
     console.error('Error processing Nexus Intelligence request:', error.message || error);
+    
+    if (error.message === 'QUOTA_EXHAUSTED') {
+      return new Response(
+        JSON.stringify({ error: "NORA AI backend quota exceeded.", code: "QUOTA_EXHAUSTED" }),
+        {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 429,
+        }
+      );
+    }
+
     return new Response(
       JSON.stringify({ error: error.message || "Nexus Intelligence is temporarily unavailable. Please try again." }),
       {

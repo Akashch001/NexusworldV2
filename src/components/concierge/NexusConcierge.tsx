@@ -290,9 +290,11 @@ export const NexusConcierge: React.FC<NexusConciergeProps> = ({ isOpen, onClose 
             conversationIdRef.current = data.conversationId;
           }
           return data.response;
-        } catch (err) {
+        } catch (err: any) {
           console.error('AI Backend Error:', err);
-          return null; // fallback to structured prompt
+          // If the AI fails (e.g. Quota Exhausted), we MUST override the hardcoded onboarding question.
+          // Otherwise, NORA will reply with unrelated stale content.
+          return "My intelligence backend is currently experiencing heavy load or quota limits. Please leave your contact details or try again shortly, and Andy will reach out directly.";
         }
       };
 
