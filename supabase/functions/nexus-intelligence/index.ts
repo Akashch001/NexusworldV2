@@ -212,8 +212,8 @@ serve(async (req) => {
       console.log(`Action Dispatcher: executing ${name}`);
 
       if (name === 'capture_lead') {
-        const leadName = (args.name || '').trim();
-        const leadEmail = (args.email || '').trim().toLowerCase();
+        const leadName = (args.name || structuredContext?.contact?.fullName || '').trim();
+        const leadEmail = (args.email || structuredContext?.contact?.email || '').trim().toLowerCase();
 
         if (!leadName) {
           return { error: 'Name is required to register lead.' };
@@ -243,6 +243,8 @@ serve(async (req) => {
             .from('leads')
             .select('*')
             .eq('conversation_id', currentConversationId)
+            .order('created_at', { ascending: false })
+            .limit(1)
             .maybeSingle();
           if (byConv) existingLead = byConv;
         }
@@ -252,6 +254,8 @@ serve(async (req) => {
             .from('leads')
             .select('*')
             .eq('email', leadEmail)
+            .order('created_at', { ascending: false })
+            .limit(1)
             .maybeSingle();
           if (byEmail) existingLead = byEmail;
         }

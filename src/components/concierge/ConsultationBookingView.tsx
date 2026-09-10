@@ -7,14 +7,19 @@ import {
 import { PrivacyDisclosure } from './PrivacyDisclosure';
 import { Calendar, CheckCircle2, ArrowRight, ShieldAlert, ArrowLeft } from 'lucide-react';
 
+import { supabase } from '../../lib/supabaseClient';
+import { getOrCreateSessionToken } from '../../hooks/useVisitorTelemetry';
+
 interface ConsultationBookingViewProps {
   intelligence: ProjectIntelligence;
+  conversationId?: string | null;
   onConfirmBooking: (slot: MockTimeSlot) => void;
   onBackToChat: () => void;
 }
 
 export const ConsultationBookingView: React.FC<ConsultationBookingViewProps> = ({
   intelligence,
+  conversationId,
   onConfirmBooking,
   onBackToChat,
 }) => {
@@ -22,12 +27,54 @@ export const ConsultationBookingView: React.FC<ConsultationBookingViewProps> = (
   const [timezone, setTimezone] = useState<string>('EST (Eastern Standard Time)');
   const [confirmedState, setConfirmedState] = useState<boolean>(false);
 
-  const handleConfirm = () => {
-    if (!selectedSlot) return;
-    setConfirmedState(true);
-    setTimeout(() => {
-      onConfirmBooking(selectedSlot);
-    }, 600);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const handleConfirm = async () => {
+    if (!selectedSlot || !conversationId) {
+      setErrorMsg("Missing session context. Please try again.");
+      return;
+    }
+    setIsSubmitting(true);
+    setErrorMsg(null);
+    
+    try {
+      const token = getOrCreateSessionToken();
+      
+      // We will parse the slot string into a rough timestamp
+      // "02:30 PM EST"
+      const now = new Date();
+      now.setDate(now.getDate() + 2); // just simulate a future date
+      const scheduledStart = now.toISOString();
+      now.setHours(now.getHours() + 1);
+      const scheduledEnd = now.toISOString();
+
+      const { error } = await supabase.rpc('book_visitor_appointment', {
+        p_visitor_token: token,
+        p_conversation_id: conversationId,
+        p_name: intelligence.contact.fullName || 'Unknown Visitor',
+        p_email: intelligence.contact.email || '',
+        p_phone: intelligence.contact.phoneNumber || '',
+        p_meeting_type: 'founder_consultation',
+        p_scheduled_start: scheduledStart,
+        p_scheduled_end: scheduledEnd,
+        p_timezone: timezone
+      });
+
+      if (error) {
+        console.error("Booking Error:", error);
+        throw new Error(error.message || "Failed to book appointment");
+      }
+
+      setConfirmedState(true);
+      setTimeout(() => {
+        onConfirmBooking(selectedSlot);
+      }, 1000);
+      
+    } catch (err: any) {
+      setErrorMsg(err.message || "An unexpected error occurred.");
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -155,12 +202,19 @@ export const ConsultationBookingView: React.FC<ConsultationBookingViewProps> = (
           </div>
 
           <div className="pt-6">
+            {errorMsg && (
+              <div className="mb-4 p-3 rounded bg-red-500/10 border border-red-500/20 text-red-400 text-xs text-center font-mono">
+                {errorMsg}
+              </div>
+            )}
             <button
               onClick={handleConfirm}
-              disabled={!selectedSlot || confirmedState}
+              disabled={!selectedSlot || confirmedState || isSubmitting || !conversationId}
               className="w-full py-3.5 px-4 rounded-lg bg-signal hover:bg-signal-bright disabled:opacity-50 text-white text-xs font-semibold uppercase tracking-wider transition-all flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(37,99,235,0.4)]"
             >
-              {confirmedState ? (
+              {isSubmitting ? (
+                 <span>Confirming...</span>
+              ) : confirmedState ? (
                 <>
                   <CheckCircle2 className="w-4 h-4 text-lime-400" />
                   <span>Consultation Confirmed!</span>

@@ -94,7 +94,7 @@ export const Capabilities: React.FC = () => {
                     <h3 className="font-display font-bold text-white text-base tracking-wide mb-1.5 group-hover:text-signal-bright transition-colors">
                       {cap.title}
                     </h3>
-                    <p className="text-zinc-400 text-xs leading-relaxed line-clamp-2">
+                    <p className="text-zinc-400 text-sm md:text-base leading-relaxed line-clamp-2">
                       {cap.subtitle}
                     </p>
                   </div>
@@ -132,7 +132,7 @@ export const Capabilities: React.FC = () => {
                 {activeCapability.subtitle}
               </p>
 
-              <p className="text-zinc-300 text-sm leading-relaxed mb-6">
+              <p className="text-zinc-300 text-sm md:text-base leading-relaxed mb-6">
                 {activeCapability.description}
               </p>
 
@@ -143,7 +143,7 @@ export const Capabilities: React.FC = () => {
                 {activeCapability.deliverables.map((item, idx) => (
                   <div
                     key={idx}
-                    className="flex items-start gap-2.5 p-2.5 rounded bg-void-surface border border-white/[0.04] text-xs text-zinc-300"
+                    className="flex items-start gap-2.5 p-2.5 rounded bg-void-surface border border-white/[0.04] text-sm text-zinc-300"
                   >
                     <CheckCircle className="w-4 h-4 text-signal shrink-0 mt-0.5" />
                     <span>{item}</span>

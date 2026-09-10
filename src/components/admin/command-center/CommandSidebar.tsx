@@ -207,7 +207,7 @@ export const CommandSidebar: React.FC<CommandSidebarProps> = ({
         </div>
 
         {/* Navigation Sections */}
-        <nav className="flex-1 overflow-y-auto px-3 py-2 space-y-6">
+        <nav className="flex-1 overflow-y-auto px-3 py-2 space-y-6 custom-scrollbar">
           {navGroups.map((group) => (
             <div key={group.groupName} className="space-y-1">
               <div className="px-3 text-[10px] font-mono font-semibold tracking-wider text-zinc-400 uppercase">

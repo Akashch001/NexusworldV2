@@ -2,6 +2,9 @@
 // NEXUS WORLD — RESEND EMAIL NOTIFICATION SERVICE
 // ==============================================================================
 
+// @ts-ignore
+declare const Deno: any;
+
 export interface ClientEmailData {
   clientName: string;
   clientEmail: string;

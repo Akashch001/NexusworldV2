@@ -1,23 +1,68 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Menu, X, ArrowUpRight } from 'lucide-react';
 import { COMPANY_INFO } from '../../data/companyData';
 
 interface HeaderProps {
   onNavigate: (sectionId: string) => void;
   onOpenConcierge?: () => void;
+  isConciergeOpen?: boolean;
 }
 
-export const Header: React.FC<HeaderProps> = ({ onNavigate, onOpenConcierge }) => {
+export const Header: React.FC<HeaderProps> = ({ onNavigate, onOpenConcierge, isConciergeOpen }) => {
   const [scrolled, setScrolled] = useState(false);
+  const [visible, setVisible] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const lastScrollY = useRef(0);
 
   useEffect(() => {
+    let ticking = false;
+
     const handleScroll = () => {
-      setScrolled(window.scrollY > 20);
+      if (!ticking) {
+        window.requestAnimationFrame(() => {
+          const currentScrollY = window.scrollY;
+          
+          setScrolled(currentScrollY > 20);
+
+          // Top of page behavior
+          if (currentScrollY <= 50) {
+            setVisible(true);
+          } else if (!mobileMenuOpen && !isConciergeOpen) {
+            // Only auto-hide if menu is closed and concierge is closed
+            const delta = currentScrollY - lastScrollY.current;
+            if (delta > 10) {
+              setVisible(false); // scrolling down
+            } else if (delta < -10) {
+              setVisible(true); // scrolling up
+            }
+          }
+
+          lastScrollY.current = currentScrollY;
+          ticking = false;
+        });
+        ticking = true;
+      }
     };
-    window.addEventListener('scroll', handleScroll);
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
+  }, [mobileMenuOpen, isConciergeOpen]);
+
+  useEffect(() => {
+    if (isConciergeOpen) {
+      setVisible(true);
+    }
+  }, [isConciergeOpen]);
+
+  useEffect(() => {
+    if (mobileMenuOpen) {
+      const originalOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      return () => {
+        document.body.style.overflow = originalOverflow;
+      };
+    }
+  }, [mobileMenuOpen]);
 
   const navItems = [
     { label: 'Capabilities', id: 'capabilities' },
@@ -34,10 +79,12 @@ export const Header: React.FC<HeaderProps> = ({ onNavigate, onOpenConcierge }) =
 
   return (
     <header
-      className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
+      className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ease-in-out ${
         scrolled
           ? 'bg-[#050507]/85 backdrop-blur-xl border-b border-white/[0.08] py-3.5 shadow-2xl shadow-black/60'
           : 'bg-transparent py-5'
+      } ${
+        !visible ? '-translate-y-full' : 'translate-y-0'
       }`}
     >
       <div className="max-w-7xl mx-auto px-6 lg:px-12 flex items-center justify-between">
@@ -68,7 +115,7 @@ export const Header: React.FC<HeaderProps> = ({ onNavigate, onOpenConcierge }) =
             <button
               key={item.id}
               onClick={() => handleLinkClick(item.id)}
-              className="relative px-3 py-1.5 text-xs font-medium text-zinc-300 hover:text-white rounded-md hover:bg-white/[0.04] transition-all duration-200 focus:outline-none"
+              className="relative px-3 py-1.5 text-sm font-medium text-zinc-300 hover:text-white rounded-md hover:bg-white/[0.04] transition-all duration-200 focus:outline-none"
             >
               <span>{item.label}</span>
             </button>
@@ -131,7 +178,7 @@ export const Header: React.FC<HeaderProps> = ({ onNavigate, onOpenConcierge }) =
               <button
                 key={item.id}
                 onClick={() => handleLinkClick(item.id)}
-                className="flex items-center justify-between py-2 text-sm font-medium text-zinc-300 hover:text-white border-b border-white/[0.04] text-left"
+                className="flex items-center justify-between py-2 text-base font-medium text-zinc-300 hover:text-white border-b border-white/[0.04] text-left"
               >
                 <span>{item.label}</span>
                 <ArrowUpRight className="w-4 h-4 text-zinc-600" />

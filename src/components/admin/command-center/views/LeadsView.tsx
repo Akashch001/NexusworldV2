@@ -27,6 +27,7 @@ export const LeadsView: React.FC<LeadsViewProps> = ({
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
   const [selectedLead, setSelectedLead] = useState<LeadRecord | null>(null);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const filteredLeads = leads.filter((lead) => {
     const matchesSearch =
@@ -57,6 +58,21 @@ export const LeadsView: React.FC<LeadsViewProps> = ({
       }
     } finally {
       setUpdatingId(null);
+    }
+  };
+
+  const handleDeleteLead = async (leadId: string) => {
+    if (!window.confirm('Are you sure you want to permanently delete this lead and its associated data?')) return;
+    setDeletingId(leadId);
+    try {
+      const { error } = await supabase.from('leads').delete().eq('id', leadId);
+      if (error) throw error;
+      setSelectedLead(null);
+      await onRefreshLeads();
+    } catch (err: any) {
+      alert('Failed to delete lead: ' + err.message);
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -352,13 +368,23 @@ export const LeadsView: React.FC<LeadsViewProps> = ({
               <span className="text-[10px] text-zinc-500">
                 Created: {new Date(selectedLead.created_at).toLocaleString()}
               </span>
-              <button
-                type="button"
-                onClick={() => setSelectedLead(null)}
-                className="px-3 py-1.5 rounded-lg bg-white/[0.04] text-white text-xs"
-              >
-                Close
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleDeleteLead(selectedLead.id)}
+                  disabled={deletingId === selectedLead.id}
+                  className="px-3 py-1.5 rounded-lg bg-red-500/10 text-red-400 text-xs border border-red-500/20 hover:bg-red-500/20 disabled:opacity-50 transition-colors"
+                >
+                  {deletingId === selectedLead.id ? 'Deleting...' : 'Delete Lead'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedLead(null)}
+                  className="px-3 py-1.5 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] text-white text-xs transition-colors"
+                >
+                  Close
+                </button>
+              </div>
             </div>
           </div>
         </div>

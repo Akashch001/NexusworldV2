@@ -9,6 +9,8 @@ import {
   XCircle,
   UserCheck,
   Loader2,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import type { ConversationRecord, MessageRecord } from '../types';
 import { supabase } from '../../../../lib/supabaseClient';
@@ -36,6 +38,7 @@ export const ConversationsView: React.FC<ConversationsViewProps> = ({
   const [replyText, setReplyText] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [isMobileListOpen, setIsMobileListOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   // Set initial selected conversation or respond to prop
@@ -329,8 +332,67 @@ export const ConversationsView: React.FC<ConversationsViewProps> = ({
       ) : (
         <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-12 gap-4">
           
-          {/* Left: Conversations Queue List (4 cols) */}
-          <div className="lg:col-span-4 bg-[#0A0A0F] border border-white/[0.08] rounded-2xl overflow-y-auto divide-y divide-white/[0.04] p-2 space-y-1">
+          {/* Mobile Conversation Selector (Visible only on < lg) */}
+          <div className="lg:hidden relative z-40 shrink-0">
+            <button
+              onClick={() => setIsMobileListOpen(!isMobileListOpen)}
+              className="w-full bg-[#0A0A0F] border border-white/[0.08] rounded-xl p-3 flex justify-between items-center text-xs text-white shadow-lg"
+            >
+              <div className="flex items-center gap-2 truncate">
+                {selectedConv ? (
+                  <>
+                    <span className="font-bold">Visitor #{selectedConv.visitor_id ? selectedConv.visitor_id.slice(-6).toUpperCase() : 'CLIENT'}</span>
+                    {getStatusBadge(selectedConv.status)}
+                  </>
+                ) : (
+                  <span className="text-zinc-500">Select a conversation...</span>
+                )}
+              </div>
+              {isMobileListOpen ? <ChevronUp className="w-4 h-4 text-zinc-500" /> : <ChevronDown className="w-4 h-4 text-zinc-500" />}
+            </button>
+            
+            {isMobileListOpen && (
+              <div className="absolute top-full left-0 right-0 mt-2 max-h-[50vh] overflow-y-auto bg-[#0A0A0F] border border-white/[0.08] rounded-xl p-2 space-y-1 shadow-2xl divide-y divide-white/[0.04]">
+                {filteredConversations.length === 0 ? (
+                  <div className="p-4 text-center text-xs text-zinc-500">
+                    No conversations in this filter.
+                  </div>
+                ) : (
+                  filteredConversations.map((conv) => {
+                    const isSelected = selectedConv?.id === conv.id;
+                    const tokenSnippet = conv.visitor_id ? conv.visitor_id.slice(-6).toUpperCase() : 'CLIENT';
+                    return (
+                      <div
+                        key={conv.id}
+                        onClick={() => {
+                          setSelectedConv(conv);
+                          setIsMobileListOpen(false);
+                        }}
+                        className={`p-3 rounded-xl cursor-pointer transition-all ${
+                          isSelected
+                            ? 'bg-[#2563EB]/15 border border-[#2563EB]/40'
+                            : 'hover:bg-white/[0.02] border border-transparent'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-bold text-xs text-white truncate">
+                            Visitor #{tokenSnippet}
+                          </span>
+                          {getStatusBadge(conv.status)}
+                        </div>
+                        <div className="text-[11px] text-zinc-400 truncate mt-1">
+                          {conv.title || 'NORA Session'}
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Left: Conversations Queue List (4 cols - Desktop Only) */}
+          <div className="hidden lg:block lg:col-span-4 bg-[#0A0A0F] border border-white/[0.08] rounded-2xl overflow-y-auto divide-y divide-white/[0.04] p-2 space-y-1">
             {filteredConversations.length === 0 ? (
               <div className="p-8 text-center text-xs text-zinc-500">
                 No conversations in this filter.

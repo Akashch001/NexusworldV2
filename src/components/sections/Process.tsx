@@ -91,8 +91,8 @@ export const Process: React.FC = () => {
                 </div>
                 <div className="space-y-2">
                   {activeStage.inputs.map((inp, idx) => (
-                    <div key={idx} className="flex items-center gap-2 text-xs text-zinc-300">
-                      <span className="w-1.5 h-1.5 rounded-full bg-zinc-600" />
+                    <div key={idx} className="flex items-center gap-2 text-sm text-zinc-300">
+                      <span className="w-1.5 h-1.5 rounded-full bg-zinc-600 shrink-0" />
                       <span>{inp}</span>
                     </div>
                   ))}
@@ -107,8 +107,8 @@ export const Process: React.FC = () => {
                 </div>
                 <div className="space-y-2">
                   {activeStage.outputs.map((out, idx) => (
-                    <div key={idx} className="flex items-center gap-2 text-xs text-zinc-200">
-                      <Check className="w-4 h-4 text-emerald-400" />
+                    <div key={idx} className="flex items-center gap-2 text-sm text-zinc-200">
+                      <Check className="w-4 h-4 text-emerald-400 shrink-0" />
                       <span>{out}</span>
                     </div>
                   ))}

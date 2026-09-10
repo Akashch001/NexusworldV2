@@ -81,7 +81,7 @@ export const App: React.FC = () => {
   };
 
   return (
-    <div className="relative min-h-screen bg-void text-[#F4F4F6] selection:bg-signal selection:text-white">
+    <div className="relative min-h-screen bg-void text-[#F4F4F6] selection:bg-signal selection:text-white overflow-x-clip">
       {/* 3D WebGL Spatial World Background */}
       <WorldCanvasView />
 
@@ -95,6 +95,7 @@ export const App: React.FC = () => {
       <Header
         onNavigate={handleHeaderNavigate}
         onOpenConcierge={() => setIsConciergeOpen(true)}
+        isConciergeOpen={isConciergeOpen}
       />
 
       {/* Spatial HUD Content Panels */}

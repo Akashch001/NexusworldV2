@@ -37,6 +37,8 @@ export const NexusConcierge: React.FC<NexusConciergeProps> = ({ isOpen, onClose 
   const [activeCharacter, setActiveCharacter] = useState<NexusCharacter>('NORA');
 
   const conversationIdRef = useRef<string | null>(null);
+  const hasLoadedHistoryRef = useRef<boolean>(false);
+  const [viewportHeight, setViewportHeight] = useState<number | null>(null);
   const [inputVal, setInputVal] = useState<string>('');
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
@@ -77,7 +79,95 @@ export const NexusConcierge: React.FC<NexusConciergeProps> = ({ isOpen, onClose 
     } else {
       setVisualState('IDLE');
     }
-  }, [isOpen, messages, viewMode]);
+  }, [isOpen, messages.length, viewMode]); // Only depend on messages length for scroll, not all messages
+
+  // Safe body scroll lock
+  useEffect(() => {
+    if (isOpen) {
+      const originalStyle = window.getComputedStyle(document.body).overflow;
+      const originalPosition = document.body.style.position;
+      const originalTop = document.body.style.top;
+      const originalWidth = document.body.style.width;
+      
+      const scrollY = window.scrollY;
+      
+      document.body.style.overflow = 'hidden';
+      document.body.style.position = 'fixed';
+      document.body.style.top = `-${scrollY}px`;
+      document.body.style.width = '100%';
+      
+      return () => {
+        document.body.style.overflow = originalStyle;
+        document.body.style.position = originalPosition;
+        document.body.style.top = originalTop;
+        document.body.style.width = originalWidth;
+        window.scrollTo(0, scrollY);
+      };
+    }
+  }, [isOpen]);
+
+  // Visual Viewport sizing for mobile keyboard
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleResize = () => {
+      if (window.visualViewport) {
+        setViewportHeight(window.visualViewport.height);
+      } else {
+        setViewportHeight(window.innerHeight);
+      }
+    };
+    
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', handleResize);
+      handleResize();
+    } else {
+      window.addEventListener('resize', handleResize);
+      handleResize();
+    }
+    
+    return () => {
+      if (window.visualViewport) {
+        window.visualViewport.removeEventListener('resize', handleResize);
+      } else {
+        window.removeEventListener('resize', handleResize);
+      }
+    };
+  }, [isOpen]);
+
+  // Fetch chat history on mount
+  useEffect(() => {
+    const loadHistory = async () => {
+      if (!isOpen || hasLoadedHistoryRef.current) return;
+      hasLoadedHistoryRef.current = true;
+      
+      const token = getOrCreateSessionToken();
+      try {
+        const { data, error } = await supabase.rpc('get_visitor_conversation', { p_visitor_token: token });
+        if (error) {
+            console.error("Failed to load chat history:", error.message);
+            return;
+        }
+        
+        if (data && data.conversation_id) {
+          conversationIdRef.current = data.conversation_id;
+          if (data.messages && data.messages.length > 0) {
+             const loadedMessages: ChatMessage[] = data.messages.map((m: any) => ({
+                 id: m.id,
+                 sender: (m.role === 'assistant' || m.role === 'system') ? 'ai' : 'user',
+                 text: m.content,
+                 timestamp: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                 intentBadge: m.metadata?.intent || undefined,
+             }));
+             setMessages(loadedMessages);
+          }
+        }
+      } catch (err) {
+        console.error("Error loading chat history", err);
+      }
+    };
+    loadHistory();
+  }, [isOpen]);
 
   // Subscribe to realtime messages if conversationId is established
   useEffect(() => {
@@ -347,10 +437,13 @@ export const NexusConcierge: React.FC<NexusConciergeProps> = ({ isOpen, onClose 
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/75 backdrop-blur-md animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-6 bg-black/75 backdrop-blur-md animate-in fade-in duration-200">
       
       {/* Outer Modal Container */}
-      <div className="relative w-full max-w-5xl h-[92vh] sm:h-[680px] bg-void-card border border-white/[0.1] rounded-2xl overflow-hidden shadow-2xl flex flex-col">
+      <div 
+        className="relative w-full max-w-5xl bg-void-card border border-white/[0.1] sm:rounded-2xl overflow-hidden shadow-2xl flex flex-col sm:h-[680px]"
+        style={{ height: (window.innerWidth < 640 && viewportHeight) ? `${viewportHeight}px` : '100dvh' }}
+      >
         
         {/* Top Header Bar */}
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-white/[0.08] bg-void-surface">
@@ -466,6 +559,7 @@ export const NexusConcierge: React.FC<NexusConciergeProps> = ({ isOpen, onClose 
             <div className="w-full h-full p-4">
               <ConsultationBookingView
                 intelligence={intelligence}
+                conversationId={conversationIdRef.current}
                 onConfirmBooking={(slot) => {
                   setBookedSlot(slot);
                   setIntelligence((prev) => ({ ...prev, intent: 'CONFIRMED' }));
@@ -489,7 +583,7 @@ export const NexusConcierge: React.FC<NexusConciergeProps> = ({ isOpen, onClose 
               <div className="flex-1 flex flex-col h-full bg-void">
                 
                 {/* Messages Stream */}
-                <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
+                <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 overscroll-contain" style={{ WebkitOverflowScrolling: 'touch' }}>
                   {messages.map((m) => {
                     const isAi = m.sender === 'ai';
                     return (

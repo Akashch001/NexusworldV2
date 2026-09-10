@@ -57,8 +57,8 @@ export const NexusCVDemo: React.FC = () => {
       </div>
 
       {/* Mode Switcher */}
-      <div className="mt-6 flex items-center justify-between border-b border-white/[0.06] pb-4 flex-wrap gap-3">
-        <div className="flex items-center gap-2">
+      <div className="mt-6 flex flex-col sm:flex-row sm:items-center justify-between border-b border-white/[0.06] pb-4 gap-4">
+        <div className="flex flex-wrap items-center gap-2">
           {[
             { id: 'preview', label: 'Interactive Document', icon: Eye },
             { id: 'tokens', label: 'Design System Tokens', icon: Sliders },
@@ -84,7 +84,7 @@ export const NexusCVDemo: React.FC = () => {
         </div>
 
         {/* Live Token Controls for Document */}
-        <div className="flex items-center gap-4 text-xs font-mono text-zinc-400">
+        <div className="flex flex-wrap items-center gap-4 text-xs font-mono text-zinc-400">
           <div className="flex items-center gap-1.5">
             <span className="text-zinc-500">Font:</span>
             {(['sans', 'serif', 'mono'] as const).map((f) => (

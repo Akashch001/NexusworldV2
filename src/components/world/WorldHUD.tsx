@@ -40,7 +40,7 @@ export const WorldHUD: React.FC<WorldHUDProps> = ({
             </span>
           </h1>
 
-          <p className="text-zinc-300 text-base sm:text-xl font-normal leading-relaxed max-w-2xl mb-8">
+          <p className="text-zinc-300 text-lg sm:text-xl font-normal leading-relaxed max-w-2xl mb-8">
             NexusWorld helps ambitious companies transform complex ideas into digital products that are{' '}
             <strong className="text-white font-medium">clear</strong>,{' '}
             <strong className="text-white font-medium">useful</strong>,{' '}
