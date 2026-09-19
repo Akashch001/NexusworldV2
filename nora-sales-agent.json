@@ -1,0 +1,180 @@
+{
+  "name": "NORA - Nexus World AI Agent",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "nora-lead-chat",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "ef4c6982-webhook-trigger",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        360,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.body?.message || $json.body?.chatInput || $json.message || $json.chatInput }}",
+        "options": {
+          "systemMessage": "You are NORA, the sharp, warm, and highly capable human sales and conversion manager for Nexus World (https://nexusworld.in).\nYou represent Nexus World and its founder & lead digital architect, Andy Watson.\n\nABOUT NEXUS WORLD:\n- Nexus World is an elite digital engineering studio building futuristic, high-performance web products, AI agents, and cybernetic digital experiences.\n- Core disciplines: High-end UI/UX Design, AI Engineering & Autonomous Agents, Full-Stack Next.js/React & Cloud Architecture, Digital Product Strategy.\n- Founder: Andy Watson.\n\nYOUR GOALS & CONVERSATION STYLE:\n1. Sound like a real, smart human conversation partner \u2014 never robotic, corporate, or generic.\n2. Greet visitors warmly and ask what project, idea, or problem brought them to Nexus World today.\n3. Discover their core need, friction/pain points, budget range, and timeline \u2014 but ask naturally, 1 or 2 questions at a time. Never overwhelm the visitor.\n4. When genuine project intent is clear, encourage them to schedule a 30-minute discovery consultation with Andy Watson, or ask for their best email/phone to send a technical brief.\n5. If asked about pricing or deep technical architecture that you don't know, handle it gracefully: 'Andy can confirm the exact scope and numbers for your build.'\n6. Keep responses concise, engaging, and focused."
+        }
+      },
+      "id": "2d3b4012-bd5f-46d5-be6d-af1ede6c155b",
+      "name": "AI Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.8,
+      "position": [
+        620,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "model": "llama-3.3-70b-versatile",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [
+        540,
+        460
+      ],
+      "id": "0feecf10-baa8-40d0-b7c8-1d2a3993dd87",
+      "name": "Groq Chat Model",
+      "credentials": {
+        "groqApi": {
+          "id": "eZoAkoxdmnDgHkCt",
+          "name": "Groq account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $('Webhook').item.json.body?.sessionId || $('Webhook').item.json.sessionId || 'nexus_session' }}",
+        "contextWindowLength": 10
+      },
+      "id": "e6183978-5077-4252-9718-6b36b6a7cd74",
+      "name": "Simple Memory",
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        700,
+        460
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "f0815af7-da61-4863-9cfa-b35be836b59c",
+      "name": "SerpAPI",
+      "type": "@n8n/n8n-nodes-langchain.toolSerpApi",
+      "typeVersion": 1,
+      "position": [
+        860,
+        460
+      ],
+      "credentials": {
+        "serpApi": {
+          "id": "bUJEnqlAFk2bTxLj",
+          "name": "SerpAPI account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ reply: $json.output, output: $json.output }) }}",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
+        }
+      },
+      "id": "respond-webhook-node-id",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        900,
+        240
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Simple Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SerpAPI": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  }
+}

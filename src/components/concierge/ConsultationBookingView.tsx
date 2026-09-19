@@ -31,8 +31,8 @@ export const ConsultationBookingView: React.FC<ConsultationBookingViewProps> = (
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const handleConfirm = async () => {
-    if (!selectedSlot || !conversationId) {
-      setErrorMsg("Missing session context. Please try again.");
+    if (!selectedSlot) {
+      setErrorMsg("Please select a consultation slot.");
       return;
     }
     setIsSubmitting(true);
@@ -40,6 +40,24 @@ export const ConsultationBookingView: React.FC<ConsultationBookingViewProps> = (
     
     try {
       const token = getOrCreateSessionToken();
+      let activeConvId = conversationId;
+
+      if (!activeConvId) {
+        const { data: convData } = await supabase.functions.invoke('nexus-intelligence', {
+          body: {
+            action: 'save_lead',
+            context: intelligence,
+            visitorId: token,
+          }
+        });
+        if (convData?.conversationId) {
+          activeConvId = convData.conversationId;
+        }
+      }
+
+      if (!activeConvId) {
+        throw new Error("Unable to establish secure booking session. Please refresh and retry.");
+      }
       
       // We will parse the slot string into a rough timestamp
       // "02:30 PM EST"
@@ -51,7 +69,7 @@ export const ConsultationBookingView: React.FC<ConsultationBookingViewProps> = (
 
       const { error } = await supabase.rpc('book_visitor_appointment', {
         p_visitor_token: token,
-        p_conversation_id: conversationId,
+        p_conversation_id: activeConvId,
         p_name: intelligence.contact.fullName || 'Unknown Visitor',
         p_email: intelligence.contact.email || '',
         p_phone: intelligence.contact.phoneNumber || '',

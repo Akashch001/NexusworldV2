@@ -79,17 +79,11 @@ serve(async (req) => {
       projectId,
       conversationId: incomingConvId,
       visitorId: incomingVisitorId,
-      context: structuredContext
+      context: structuredContext,
+      action,
+      reply,
+      lead: directLead,
     } = reqBody;
-
-    if (!messages || !Array.isArray(messages) || messages.length === 0) {
-      throw new Error("Invalid request body. 'messages' array is required.");
-    }
-
-    const geminiKey = Deno.env.get('GEMINI_API_KEY');
-    if (!geminiKey) {
-      throw new Error("Missing Gemini API configuration on the server.");
-    }
 
     const visitorId = incomingVisitorId || (userId ? `user_${userId}` : `vis_${crypto.randomUUID()}`);
     let currentConversationId = incomingConvId;
@@ -106,12 +100,15 @@ serve(async (req) => {
 
       if (existingConv) {
         convStatus = existingConv.status || 'ai';
+        if (!existingConv.visitor_id && visitorId) {
+          await serviceClient.from('conversations').update({ visitor_id: visitorId }).eq('id', currentConversationId);
+        }
 
         // CRITICAL: When conversation status is 'human', NORA MUST NOT respond!
-        if (convStatus === 'human') {
+        if (convStatus === 'human' && !action && !reply) {
           console.log(`Conversation ${currentConversationId} is in human mode. NORA silenced.`);
           // Save visitor message to conversation transcript so Andy sees it in real time
-          const lastUserMsg = messages[messages.length - 1];
+          const lastUserMsg = messages?.[messages.length - 1];
           if (lastUserMsg && lastUserMsg.sender === 'user') {
             await serviceClient.from('messages').insert({
               conversation_id: currentConversationId,
@@ -138,6 +135,22 @@ serve(async (req) => {
         }
       } else {
         currentConversationId = null;
+      }
+    }
+
+    // Try finding existing conversation for this visitor
+    if (!currentConversationId && visitorId) {
+      const { data: existingVisitorConv } = await serviceClient
+        .from('conversations')
+        .select('id, status')
+        .eq('visitor_id', visitorId)
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (existingVisitorConv) {
+        currentConversationId = existingVisitorConv.id;
+        convStatus = existingVisitorConv.status || 'ai';
       }
     }
 
@@ -424,7 +437,78 @@ serve(async (req) => {
       return { error: `Unknown action: ${name}` };
     };
 
-    // 5. Build NORA System Prompt (Identity, Personality, Lore, and Directives)
+    // 4. Auto-capture lead if structuredContext, directLead, or contact information is present
+    const candidateName = (directLead?.name || structuredContext?.contact?.fullName || '').trim();
+    const candidateEmail = (directLead?.email || structuredContext?.contact?.email || '').trim();
+    const candidatePhone = (directLead?.phone || structuredContext?.contact?.phoneNumber || '').trim();
+    const candidateCompany = (directLead?.company_name || structuredContext?.business?.companyName || '').trim();
+    const candidateService = (directLead?.service_interest || (structuredContext?.project?.services?.length ? structuredContext.project.services.join(', ') : structuredContext?.project?.need) || '').trim();
+    const candidateDesc = (directLead?.project_description || structuredContext?.project?.problem || structuredContext?.project?.need || '').trim();
+    const candidateTimeline = (directLead?.timeline || structuredContext?.project?.timeline || '').trim();
+
+    let leadCaptureResult: any = null;
+    if (candidateName || candidateEmail || candidatePhone || candidateCompany || directLead) {
+      leadCaptureResult = await executeTool('capture_lead', {
+        name: candidateName || (candidateEmail ? candidateEmail.split('@')[0] : 'Visitor'),
+        email: candidateEmail || undefined,
+        phone: candidatePhone || undefined,
+        company_name: candidateCompany || undefined,
+        service_interest: candidateService || undefined,
+        project_description: candidateDesc || undefined,
+        timeline: candidateTimeline || undefined,
+        lead_temperature: directLead?.lead_temperature || (structuredContext?.intent === 'BOOKING_ENGAGED' ? 'hot' : 'warm'),
+        lead_score: directLead?.lead_score || (structuredContext?.intent === 'BOOKING_ENGAGED' ? 90 : 60),
+        consent_to_contact: true,
+      });
+    }
+
+    // 5. If reply was provided by caller/n8n, OR if action is 'save_lead' / 'sync_telemetry':
+    if (reply || action === 'save_lead' || action === 'sync_telemetry') {
+      if (currentConversationId) {
+        if (messages && messages.length > 0) {
+          const lastUserMsg = messages[messages.length - 1];
+          if (lastUserMsg && lastUserMsg.sender === 'user') {
+            await serviceClient.from('messages').insert({
+              conversation_id: currentConversationId,
+              user_id: userId,
+              visitor_id: visitorId,
+              role: 'user',
+              content: lastUserMsg.text
+            });
+          }
+        }
+
+        if (reply) {
+          await serviceClient.from('messages').insert({
+            conversation_id: currentConversationId,
+            user_id: userId,
+            visitor_id: visitorId,
+            role: 'assistant',
+            content: reply
+          });
+        }
+
+        await serviceClient.from('conversations').update({ updated_at: new Date().toISOString() }).eq('id', currentConversationId);
+      }
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          response: reply || null,
+          conversationId: currentConversationId,
+          visitorId: visitorId,
+          status: convStatus,
+          andyOnline: isAndyOnline,
+          lead: leadCaptureResult
+        }),
+        {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 200,
+        }
+      );
+    }
+
+    // 6. Build NORA System Prompt (Identity, Personality, Lore, and Directives)
     const systemPrompt = `You are NORA, the digital intelligence layer and manager of NexusWorld.
 Your creator and the founder of NexusWorld is Andy Watson. You call him "Andy".
 
@@ -465,57 +549,92 @@ ${userMemoriesText}
 ${projectMemoriesText}
 ${uiContextText}`;
 
-    // 6. Call Gemini Provider with Tool Calling
-    console.log('Gemini request started for NORA');
-    const provider = new GeminiProvider(geminiKey);
-
-    const aiRequest: AIRequest = {
-      systemPrompt,
-      messages: messages.map((m: any) => ({
-        role: m.sender === 'user' ? 'user' : 'assistant',
-        content: m.text
-      })),
-      tools: noraTools,
-      toolExecutor: executeTool
-    };
-
-    const response = await provider.generateResponse(aiRequest);
-
-    // 7. Persist Messages
-    if (currentConversationId) {
-      const userMessage = messages[messages.length - 1];
-
-      await serviceClient.from('messages').insert([
-        {
-          conversation_id: currentConversationId,
-          user_id: userId,
-          visitor_id: visitorId,
-          role: 'user',
-          content: userMessage.text
-        },
-        {
-          conversation_id: currentConversationId,
-          user_id: userId,
-          visitor_id: visitorId,
-          role: 'assistant',
-          content: response.content
-        }
-      ]);
+    // 7. Call Gemini Provider with Tool Calling (Fallback)
+    const geminiKey = Deno.env.get('GEMINI_API_KEY');
+    if (!geminiKey) {
+      return new Response(
+        JSON.stringify({
+          response: "Nexus Intelligence backend is online. Please leave your details or inquiry and Andy Watson will follow up promptly.",
+          conversationId: currentConversationId,
+          visitorId: visitorId,
+          status: convStatus,
+          andyOnline: isAndyOnline,
+          lead: leadCaptureResult
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+      );
     }
 
-    return new Response(
-      JSON.stringify({
-        response: response.content,
-        conversationId: currentConversationId,
-        visitorId: visitorId,
-        status: convStatus,
-        andyOnline: isAndyOnline
-      }),
-      {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 200,
+    try {
+      console.log('Gemini request started for NORA');
+      const provider = new GeminiProvider(geminiKey);
+
+      const aiRequest: AIRequest = {
+        systemPrompt,
+        messages: (messages || []).map((m: any) => ({
+          role: m.sender === 'user' ? 'user' : 'assistant',
+          content: m.text
+        })),
+        tools: noraTools,
+        toolExecutor: executeTool
+      };
+
+      const response = await provider.generateResponse(aiRequest);
+
+      // Persist Messages
+      if (currentConversationId && messages && messages.length > 0) {
+        const userMessage = messages[messages.length - 1];
+
+        await serviceClient.from('messages').insert([
+          {
+            conversation_id: currentConversationId,
+            user_id: userId,
+            visitor_id: visitorId,
+            role: 'user',
+            content: userMessage.text
+          },
+          {
+            conversation_id: currentConversationId,
+            user_id: userId,
+            visitor_id: visitorId,
+            role: 'assistant',
+            content: response.content
+          }
+        ]);
+        await serviceClient.from('conversations').update({ updated_at: new Date().toISOString() }).eq('id', currentConversationId);
       }
-    );
+
+      return new Response(
+        JSON.stringify({
+          response: response.content,
+          conversationId: currentConversationId,
+          visitorId: visitorId,
+          status: convStatus,
+          andyOnline: isAndyOnline,
+          lead: leadCaptureResult
+        }),
+        {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 200,
+        }
+      );
+    } catch (genError: any) {
+      console.warn('Gemini generation error, returning fallback response:', genError.message || genError);
+      return new Response(
+        JSON.stringify({
+          response: "Thanks for sharing those project parameters! Andy Watson and our team have logged your details and will connect with you.",
+          conversationId: currentConversationId,
+          visitorId: visitorId,
+          status: convStatus,
+          andyOnline: isAndyOnline,
+          lead: leadCaptureResult
+        }),
+        {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 200,
+        }
+      );
+    }
   } catch (error: any) {
     console.error('Error processing Nexus Intelligence request:', error.message || error);
     

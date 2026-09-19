@@ -42,6 +42,7 @@ export const COMPANY_INFO = {
   role: "Co-Founder",
   year: 2026,
   email: "connect@nexusworld.in",
+  phone: "+91 9748888478",
   headline: "WE BUILD DIGITAL WORLDS.",
   primaryMessage: "Building digital experiences that move businesses forward.",
   positioning: "NexusWorld is a boutique digital product design and development agency focused on creating sophisticated digital products, experiences, and systems.",

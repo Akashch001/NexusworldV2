@@ -1,14 +1,98 @@
 import React, { useState } from 'react';
 import { Check, Send, Terminal, Copy } from 'lucide-react';
 import { COMPANY_INFO } from '../../data/companyData';
+import { supabase } from '../../lib/supabaseClient';
+import { getOrCreateSessionToken } from '../../hooks/useVisitorTelemetry';
 
 export const ContactSection: React.FC = () => {
   const [selectedServices, setSelectedServices] = useState<string[]>(['UI/UX Design', 'Frontend Engineering']);
   const [timeline, setTimeline] = useState<string>('1-2 Months');
   const [clientName, setClientName] = useState<string>('');
   const [clientEmail, setClientEmail] = useState<string>('');
+  const [clientPhone, setClientPhone] = useState<string>('');
   const [projectDescription, setProjectDescription] = useState<string>('');
   const [copied, setCopied] = useState<boolean>(false);
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [submitStatus, setSubmitStatus] = useState<'idle' | 'success' | 'error'>('idle');
+
+  // Obfuscated key retrieval to prevent basic scraping
+  const getAccessKey = () => {
+    // Hidden key: c0c19f1d-64be-4da4-bd39-7a0ae81cfa43
+    const enc = [99, 48, 99, 49, 57, 102, 49, 100, 45, 54, 52, 98, 101, 45, 52, 100, 97, 52, 45, 98, 100, 51, 57, 45, 55, 97, 48, 97, 101, 56, 49, 99, 102, 97, 52, 51];
+    return String.fromCharCode(...enc);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!clientName || !clientEmail || !clientPhone) {
+      return;
+    }
+
+    setIsSubmitting(true);
+    setSubmitStatus('idle');
+
+    try {
+      // Save lead to Supabase database so it appears in the Admin Dashboard
+      try {
+        const token = getOrCreateSessionToken();
+        await supabase.functions.invoke('nexus-intelligence', {
+          body: {
+            action: 'save_lead',
+            lead: {
+              name: clientName,
+              email: clientEmail,
+              phone: clientPhone,
+              service_interest: selectedServices.join(', '),
+              project_description: projectDescription,
+              timeline: timeline,
+              lead_temperature: 'warm',
+              source: 'contact_form',
+            },
+            visitorId: token,
+          }
+        });
+      } catch (dbErr) {
+        console.warn('Supabase lead capture note:', dbErr);
+      }
+
+      const response = await fetch("https://api.web3forms.com/submit", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({
+          access_key: getAccessKey(),
+          subject: `Project Inquiry: ${clientName || 'Digital Product'} via NexusWorld.in`,
+          from_name: clientName,
+          email: clientEmail,
+          phone: clientPhone,
+          message: `Project Scope:\n- Selected Disciplines: ${selectedServices.join(', ')}\n- Estimated Timeline: ${timeline}\n\nProject Details:\n${projectDescription || '[No description provided]'}`,
+        }),
+      });
+      const result = await response.json();
+      if (result.success) {
+        setSubmitStatus('success');
+        // Clear form
+        setClientName('');
+        setClientEmail('');
+        setClientPhone('');
+        setProjectDescription('');
+        setSelectedServices(['UI/UX Design', 'Frontend Engineering']);
+        setTimeline('1-2 Months');
+        setTimeout(() => setSubmitStatus('idle'), 5000);
+      } else {
+        setSubmitStatus('error');
+        setTimeout(() => setSubmitStatus('idle'), 3000);
+      }
+    } catch (error) {
+      console.error(error);
+      setSubmitStatus('error');
+      setTimeout(() => setSubmitStatus('idle'), 3000);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   const availableServices = [
     'Product Strategy',
@@ -34,11 +118,6 @@ export const ContactSection: React.FC = () => {
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
-
-  const emailSubject = encodeURIComponent(`Project Inquiry: ${clientName || 'Digital Product'} via NexusWorld.in`);
-  const emailBody = encodeURIComponent(
-    `Hello Andy,\n\nI would like to discuss building a digital product with NexusWorld.\n\nProject Scope:\n- Selected Disciplines: ${selectedServices.join(', ')}\n- Estimated Timeline: ${timeline}\n\nProject Details:\n${projectDescription || '[Add brief notes about your product vision]'}\n\nBest,\n${clientName || '[Your Name]'}\n${clientEmail || ''}`
-  );
 
   return (
     <section id="contact" className="py-24 relative border-t border-white/[0.06] bg-void-deep contain-isolated">
@@ -66,7 +145,7 @@ export const ContactSection: React.FC = () => {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
           
           {/* Left: Interactive Configurator Controls */}
-          <div className="lg:col-span-7 rounded-xl bg-void-card border border-white/[0.08] p-6 lg:p-8 shadow-2xl space-y-6">
+          <form onSubmit={handleSubmit} className="lg:col-span-7 rounded-xl bg-void-card border border-white/[0.08] p-6 lg:p-8 shadow-2xl space-y-6">
             
             {/* 1. Disciplines Selection */}
             <div>
@@ -118,7 +197,7 @@ export const ContactSection: React.FC = () => {
               </div>
             </div>
 
-            {/* 3. Name & Email */}
+            {/* 3. Contact Details */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="text-[11px] font-mono text-zinc-400 uppercase tracking-wider block mb-1.5">
@@ -126,6 +205,7 @@ export const ContactSection: React.FC = () => {
                 </label>
                 <input
                   type="text"
+                  required
                   value={clientName}
                   onChange={(e) => setClientName(e.target.value)}
                   placeholder="e.g. Elena Rostova"
@@ -139,9 +219,24 @@ export const ContactSection: React.FC = () => {
                 </label>
                 <input
                   type="email"
+                  required
                   value={clientEmail}
                   onChange={(e) => setClientEmail(e.target.value)}
                   placeholder="elena@company.com"
+                  className="w-full bg-void-surface border border-white/[0.08] focus:border-signal rounded-lg px-3.5 py-2.5 text-xs text-white placeholder:text-zinc-600 focus:outline-none transition-colors"
+                />
+              </div>
+
+              <div>
+                <label className="text-[11px] font-mono text-zinc-400 uppercase tracking-wider block mb-1.5">
+                  Phone / Whatsapp:
+                </label>
+                <input
+                  type="tel"
+                  required
+                  value={clientPhone}
+                  onChange={(e) => setClientPhone(e.target.value)}
+                  placeholder="+1 (555) 000-0000"
                   className="w-full bg-void-surface border border-white/[0.08] focus:border-signal rounded-lg px-3.5 py-2.5 text-xs text-white placeholder:text-zinc-600 focus:outline-none transition-colors"
                 />
               </div>
@@ -161,15 +256,32 @@ export const ContactSection: React.FC = () => {
               />
             </div>
 
-            {/* Send Mail Action */}
+            {/* Send Form Action */}
             <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-              <a
-                href={`mailto:${COMPANY_INFO.email}?subject=${emailSubject}&body=${emailBody}`}
-                className="flex-1 py-3.5 px-6 rounded-lg bg-signal hover:bg-signal-bright text-white text-xs font-semibold uppercase tracking-wider transition-all flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(37,99,235,0.4)]"
+              <button
+                type="submit"
+                disabled={isSubmitting || submitStatus === 'success'}
+                className={`flex-1 py-3.5 px-6 rounded-lg text-xs font-semibold uppercase tracking-wider transition-all flex items-center justify-center gap-2 ${
+                  submitStatus === 'success' 
+                    ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                    : submitStatus === 'error'
+                    ? 'bg-red-500/20 text-red-400 border border-red-500/30'
+                    : 'bg-signal hover:bg-signal-bright text-white shadow-[0_0_20px_rgba(37,99,235,0.4)] disabled:opacity-50'
+                }`}
               >
-                <Send className="w-3.5 h-3.5" />
-                <span>Transmit Project Specification</span>
-              </a>
+                {isSubmitting ? (
+                  <span className="flex items-center gap-2">
+                    <span className="w-3.5 h-3.5 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+                    Transmitting...
+                  </span>
+                ) : submitStatus === 'success' ? (
+                  <span className="flex items-center gap-2"><Check className="w-4 h-4" /> Specification Received</span>
+                ) : submitStatus === 'error' ? (
+                  <span>Transmission Failed - Retry</span>
+                ) : (
+                  <span className="flex items-center gap-2"><Send className="w-3.5 h-3.5" /> Transmit Project Specification</span>
+                )}
+              </button>
 
               <button
                 type="button"
@@ -181,7 +293,7 @@ export const ContactSection: React.FC = () => {
               </button>
             </div>
 
-          </div>
+          </form>
 
           {/* Right: Direct Founder Terminal & Protocol Info */}
           <div className="lg:col-span-5 space-y-6">
@@ -209,6 +321,10 @@ export const ContactSection: React.FC = () => {
                 <div>
                   <span className="text-zinc-500">Email: </span>
                   <span className="text-zinc-200">{COMPANY_INFO.email}</span>
+                </div>
+                <div>
+                  <span className="text-zinc-500">Phone: </span>
+                  <span className="text-zinc-200">{COMPANY_INFO.phone}</span>
                 </div>
                 <div>
                   <span className="text-zinc-500">Location: </span>

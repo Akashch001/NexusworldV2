@@ -23,6 +23,19 @@ import {
   Sliders,
 } from 'lucide-react';
 
+const NORA_DEFAULT_SUGGESTIONS = [
+  "📅 I’d like to book a call",
+  "👋 What can Nexus World help me with?",
+  "💡 I have a project idea — can I tell you about it?",
+  "🎨 I need help with my website or product design",
+  "🤖 I want to build an AI product",
+  "💻 I need help with frontend or web development",
+  "💰 How much would a project like this cost?",
+  "🚀 I’m launching a product — where should I start?",
+  "🧭 I’m not sure what I need. Can you help?",
+  "👤 I’d like to talk to Andy"
+];
+
 interface NexusConciergeProps {
   isOpen: boolean;
   onClose: () => void;
@@ -44,14 +57,9 @@ export const NexusConcierge: React.FC<NexusConciergeProps> = ({ isOpen, onClose 
     {
       id: 'm1',
       sender: 'ai',
-      text: "NEXUS INTELLIGENCE // SYSTEM ONLINE. I'm NORA. I help you understand what you're building, what's getting in the way, and where Nexus World can help.",
+      text: "Hi, I’m NORA. How can I help?",
       timestamp: '11:00 EST',
-      suggestions: [
-        "We're a SaaS startup needing a complete UX/UI redesign",
-        "Building an AI product experience from scratch",
-        "Need high-craft frontend engineering & design system",
-        "Just exploring NexusWorld capabilities",
-      ],
+      suggestions: NORA_DEFAULT_SUGGESTIONS,
       intentBadge: 'EXPLORING',
     },
   ]);
@@ -214,17 +222,47 @@ export const NexusConcierge: React.FC<NexusConciergeProps> = ({ isOpen, onClose 
 
   if (!isOpen) return null;
 
+  const syncLeadToSupabase = async (
+    intel: ProjectIntelligence,
+    lastUserText?: string,
+    aiReplyText?: string,
+  ) => {
+    try {
+      const visitorToken = getOrCreateSessionToken();
+      const { data, error } = await supabase.functions.invoke('nexus-intelligence', {
+        body: {
+          action: 'sync_telemetry',
+          reply: aiReplyText,
+          messages: lastUserText ? [{ sender: 'user', text: lastUserText }] : undefined,
+          context: intel,
+          conversationId: conversationIdRef.current,
+          visitorId: visitorToken,
+        }
+      });
+      if (!error && data?.conversationId) {
+        conversationIdRef.current = data.conversationId;
+      }
+      return data;
+    } catch (err) {
+      console.warn('Sync lead notice:', err);
+    }
+  };
+
   const handleUpdateIntelligence = (updated: Partial<ProjectIntelligence>) => {
-    setIntelligence((prev) => ({
-      ...prev,
+    const nextIntel: ProjectIntelligence = {
+      ...intelligence,
       ...updated,
-      contact: { ...prev.contact, ...(updated.contact || {}) },
-      business: { ...prev.business, ...(updated.business || {}) },
-      digital: { ...prev.digital, ...(updated.digital || {}) },
-      project: { ...prev.project, ...(updated.project || {}) },
-    }));
+      contact: { ...intelligence.contact, ...(updated.contact || {}) },
+      business: { ...intelligence.business, ...(updated.business || {}) },
+      digital: { ...intelligence.digital, ...(updated.digital || {}) },
+      project: { ...intelligence.project, ...(updated.project || {}) },
+    };
+    setIntelligence(nextIntel);
     setVisualState('SUCCESS');
     setTimeout(() => setVisualState('IDLE'), 1200);
+
+    // Persist immediately to Supabase database so Admin Dashboard shows client information
+    syncLeadToSupabase(nextIntel);
   };
 
   // Conversational response engine with progressive extraction
@@ -245,29 +283,53 @@ export const NexusConcierge: React.FC<NexusConciergeProps> = ({ isOpen, onClose 
     setTimeout(() => {
       setVisualState('RESPONDING');
 
-      // 1. Check if user accepts consultation booking
-      if (
-        intelligence.intent === 'CONSULTATION_OFFERED' &&
-        (lower.includes('yes') || lower.includes('sure') || lower.includes('schedule') || lower.includes('book') || lower.includes('sounds good') || lower.includes('ready'))
-      ) {
-        setIntelligence((prev) => ({ ...prev, intent: 'BOOKING_ENGAGED' }));
+      // 1. Check if user requests consultation booking or scheduling directly
+      const isBookingRequested =
+        (intelligence.intent === 'CONSULTATION_OFFERED' &&
+          (lower.includes('yes') || lower.includes('sure') || lower.includes('sounds good') || lower.includes('ready'))) ||
+        lower.includes('book') ||
+        lower.includes('appointment') ||
+        lower.includes('appoitment') ||
+        lower.includes('schedule') ||
+        lower.includes('calendar') ||
+        lower.includes('meeting') ||
+        lower.includes('consultation') ||
+        lower.includes('talk to andy');
+
+      if (isBookingRequested) {
+        const updatedIntelligence: ProjectIntelligence = {
+          ...intelligence,
+          intent: 'BOOKING_ENGAGED'
+        };
+
+        const emailMatch = text.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+        if (emailMatch) updatedIntelligence.contact.email = emailMatch[0];
+
+        const phoneMatch = text.match(/(?:\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/);
+        if (phoneMatch) updatedIntelligence.contact.phoneNumber = phoneMatch[0];
+
+        setIntelligence(updatedIntelligence);
         setVisualState('BOOKING');
+
+        const bookingReply = "I'd be glad to arrange that for you right away! I'm opening our roadmap consultation calendar so you can select a 30-minute alignment window with Andy Watson.";
         const aiMsg: ChatMessage = {
           id: `ai-${Date.now()}`,
           sender: 'ai',
-          text: "Excellent. Let's select an alignment window for your roadmap consultation with Andy Watson.",
+          text: bookingReply,
           timestamp: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
           intentBadge: 'BOOKING_ENGAGED',
         };
         setMessages((prev) => [...prev, aiMsg]);
-        setTimeout(() => setViewMode('booking'), 900);
+
+        // Sync lead & message immediately to Supabase
+        syncLeadToSupabase(updatedIntelligence, text, bookingReply);
+        setTimeout(() => setViewMode('booking'), 800);
         return;
       }
 
       // 2. Check for project context (SaaS, website, AI, etc.)
       let updatedIntelligence = { ...intelligence };
       let aiResponseText = '';
-      let suggestions: string[] = [];
       let newIntent: ProgressiveIntentStage = intelligence.intent;
 
       // Extract business / project signals
@@ -331,8 +393,8 @@ export const NexusConcierge: React.FC<NexusConciergeProps> = ({ isOpen, onClose 
         updatedIntelligence.contact.phoneNumber = phoneMatch[0];
       }
 
-      if (!updatedIntelligence.contact.fullName && (lower.includes('my name is') || lower.includes("i'm ") || lower.includes('im ') || lower.includes('call me '))) {
-        const nameMatch = text.match(/(?:my name is|i'm|im|call me)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/i);
+      if (!updatedIntelligence.contact.fullName && (lower.includes('my name is') || lower.includes("i'm ") || lower.includes('im ') || lower.includes('i am ') || lower.includes('call me '))) {
+        const nameMatch = text.match(/(?:my name is|i'm|im|i am|call me)\s+([A-Za-z]+(?:\s+[A-Za-z]+)?)/i);
         if (nameMatch && nameMatch[1]) updatedIntelligence.contact.fullName = nameMatch[1];
       }
 
@@ -344,24 +406,42 @@ export const NexusConcierge: React.FC<NexusConciergeProps> = ({ isOpen, onClose 
 
       if (!updatedIntelligence.digital.hasWebsite || updatedIntelligence.digital.hasWebsite === 'Unknown') {
         aiResponseText = "Understood. That directly matches what we engineer. Do you currently have an existing website or app, or are we architecting this completely from scratch?";
-        suggestions = ["We have an existing website", "Starting completely from scratch", "We have a mobile app but no web presence"];
       } else if (!updatedIntelligence.business.companyName && !updatedIntelligence.contact.fullName) {
         aiResponseText = "Got it. Before I synthesize the project parameters for Andy Watson, what is your name and company or business name?";
-        suggestions = ["I'm Elena from NexaCore", "Alex from Continuum Labs", "Personal stealth project"];
       } else if (!updatedIntelligence.contact.email) {
         newIntent = 'QUALIFIED';
         aiResponseText = `Thank you, ${updatedIntelligence.contact.fullName || 'there'}. What is the best email address to send your technical project brief to? (And optionally, a phone number if preferred for WhatsApp/calls).`;
-        suggestions = ["Enter email above", "contact@mycompany.com"];
       } else {
         // High Intent & Snapshot synthesis
         newIntent = 'CONSULTATION_OFFERED';
         aiResponseText = `Here is what I have synthesized for NexusWorld:\n\n• Entity: ${updatedIntelligence.business.companyName || updatedIntelligence.business.businessType || 'Digital Venture'}\n• Core Need: ${updatedIntelligence.project.need || 'Digital Product Engineering'}\n• Friction: ${updatedIntelligence.project.problem || 'Outdated UX / scalability limitations'}\n• Disciplines: ${updatedIntelligence.project.services.join(', ') || 'UI/UX & Frontend'}\n• Timeline: ${updatedIntelligence.project.timeline}\n\nDoes this accurately represent your goals? If so, would you like to explore scheduling a 30-minute consultation with Andy Watson?`;
-        suggestions = ["Yes, let's schedule a consultation", "Actually, I need to adjust a detail", "Just send the brief to my email"];
       }
 
-      // Generate dynamic response using AI Backend
+      // Generate dynamic response using AI Backend (n8n Webhook with concurrent Supabase lead sync)
       const fetchAIResponse = async () => {
         try {
+          const n8nWebhook = import.meta.env.VITE_N8N_NORA_WEBHOOK_URL;
+          if (n8nWebhook) {
+            const visitorToken = getOrCreateSessionToken();
+            const res = await fetch(n8nWebhook, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                message: userMsg.text,
+                chatInput: userMsg.text,
+                sessionId: visitorToken,
+              }),
+            });
+            if (!res.ok) throw new Error(`n8n webhook error: ${res.statusText}`);
+            const n8nData = await res.json();
+            const n8nReply = n8nData.reply || n8nData.output || n8nData.text || (typeof n8nData === 'string' ? n8nData : JSON.stringify(n8nData));
+
+            // CRITICAL: Persist conversation and lead to Supabase database so Admin Dashboard displays it in real time
+            syncLeadToSupabase(updatedIntelligence, userMsg.text, n8nReply);
+
+            return n8nReply;
+          }
+
           if (!import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VITE_SUPABASE_ANON_KEY) {
              throw new Error('Supabase not configured');
           }
@@ -382,8 +462,8 @@ export const NexusConcierge: React.FC<NexusConciergeProps> = ({ isOpen, onClose 
           return data.response;
         } catch (err: any) {
           console.error('AI Backend Error:', err);
-          // If the AI fails (e.g. Quota Exhausted), we MUST override the hardcoded onboarding question.
-          // Otherwise, NORA will reply with unrelated stale content.
+          // Still sync client information and user inquiry to Supabase
+          syncLeadToSupabase(updatedIntelligence, userMsg.text, undefined);
           return "My intelligence backend is currently experiencing heavy load or quota limits. Please leave your contact details or try again shortly, and Andy will reach out directly.";
         }
       };
@@ -396,14 +476,14 @@ export const NexusConcierge: React.FC<NexusConciergeProps> = ({ isOpen, onClose 
          updatedIntelligence.intent = newIntent;
          setIntelligence(updatedIntelligence);
 
-         const aiMsg: ChatMessage = {
-           id: `ai-${Date.now()}`,
-           sender: 'ai',
-           text: aiResponseText,
-           timestamp: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
-           suggestions,
-           intentBadge: newIntent,
-         };
+          const aiMsg: ChatMessage = {
+            id: `ai-${Date.now()}`,
+            sender: 'ai',
+            text: aiResponseText,
+            timestamp: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+            suggestions: [],
+            intentBadge: newIntent,
+          };
 
          setMessages((prev) => [...prev, aiMsg]);
          setVisualState(newIntent === 'CONSULTATION_OFFERED' ? 'SUCCESS' : 'IDLE');
@@ -424,13 +504,9 @@ export const NexusConcierge: React.FC<NexusConciergeProps> = ({ isOpen, onClose 
       {
         id: 'm1',
         sender: 'ai',
-        text: `NEXUS INTELLIGENCE // SYSTEM ONLINE. I'm ${activeCharacter}. I help you understand what you're building, what's getting in the way, and where Nexus World can help.`,
+        text: "Hi, I’m NORA. How can I help?",
         timestamp: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
-        suggestions: [
-          "We're a SaaS startup needing a complete UX/UI redesign",
-          "Building an AI product experience from scratch",
-          "Need high-craft frontend engineering & design system",
-        ],
+        suggestions: NORA_DEFAULT_SUGGESTIONS,
         intentBadge: 'EXPLORING',
       },
     ]);
@@ -610,12 +686,12 @@ export const NexusConcierge: React.FC<NexusConciergeProps> = ({ isOpen, onClose 
 
                           {/* Chips / Quick Reply Suggestions */}
                           {m.suggestions && m.suggestions.length > 0 && (
-                            <div className="flex flex-wrap gap-1.5 pt-1">
+                            <div className="flex flex-wrap gap-1.5 pt-1.5">
                               {m.suggestions.map((s, idx) => (
                                 <button
                                   key={idx}
                                   onClick={() => processUserMessage(s)}
-                                  className="px-2.5 py-1 rounded bg-void-deep hover:bg-void-surface border border-white/[0.06] hover:border-signal/40 text-[11px] font-mono text-zinc-400 hover:text-white transition-all text-left"
+                                  className="px-3 py-1.5 rounded-lg bg-void-surface hover:bg-white/[0.08] border border-white/[0.08] hover:border-signal/50 text-[11.5px] font-sans text-zinc-300 hover:text-white transition-all text-left shadow-sm active:scale-95 flex items-center gap-1.5"
                                 >
                                   {s}
                                 </button>
