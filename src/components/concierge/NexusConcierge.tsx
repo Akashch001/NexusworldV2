@@ -420,26 +420,61 @@ export const NexusConcierge: React.FC<NexusConciergeProps> = ({ isOpen, onClose 
       // Generate dynamic response using AI Backend (n8n Webhook with concurrent Supabase lead sync)
       const fetchAIResponse = async () => {
         try {
-          const n8nWebhook = import.meta.env.VITE_N8N_NORA_WEBHOOK_URL;
+          const n8nWebhook =
+            import.meta.env.VITE_N8N_NORA_WEBHOOK_URL ||
+            'https://nexusworld.app.n8n.cloud/webhook/nora-lead-chat';
+
           if (n8nWebhook) {
             const visitorToken = getOrCreateSessionToken();
-            const res = await fetch(n8nWebhook, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                message: userMsg.text,
-                chatInput: userMsg.text,
-                sessionId: visitorToken,
-              }),
-            });
-            if (!res.ok) throw new Error(`n8n webhook error: ${res.statusText}`);
-            const n8nData = await res.json();
-            const n8nReply = n8nData.reply || n8nData.output || n8nData.text || (typeof n8nData === 'string' ? n8nData : JSON.stringify(n8nData));
+            const reqPayload = {
+              message: userMsg.text,
+              chatInput: userMsg.text,
+              sessionId: visitorToken,
+            };
 
-            // CRITICAL: Persist conversation and lead to Supabase database so Admin Dashboard displays it in real time
-            syncLeadToSupabase(updatedIntelligence, userMsg.text, n8nReply);
+            let res: Response | null = null;
+            try {
+              res = await fetch(n8nWebhook, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(reqPayload),
+              });
+            } catch (networkErr) {
+              console.warn('Primary n8n connection attempt notice:', networkErr);
+            }
 
-            return n8nReply;
+            // Fallback: If production webhook returned 404 (e.g. workflow in test mode in n8n), try test webhook
+            if (!res || res.status === 404) {
+              const testWebhook = n8nWebhook.replace('/webhook/', '/webhook-test/');
+              if (testWebhook !== n8nWebhook) {
+                try {
+                  const testRes = await fetch(testWebhook, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(reqPayload),
+                  });
+                  if (testRes.ok) {
+                    res = testRes;
+                  }
+                } catch {
+                  // Ignore test endpoint fallback error
+                }
+              }
+            }
+
+            if (res && res.ok) {
+              const n8nData = await res.json();
+              const n8nReply =
+                n8nData.reply ||
+                n8nData.output ||
+                n8nData.text ||
+                (typeof n8nData === 'string' ? n8nData : JSON.stringify(n8nData));
+
+              // Persist conversation and lead to Supabase database in background
+              syncLeadToSupabase(updatedIntelligence, userMsg.text, n8nReply);
+
+              return n8nReply;
+            }
           }
 
           if (!import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VITE_SUPABASE_ANON_KEY) {
