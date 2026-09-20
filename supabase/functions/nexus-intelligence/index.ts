@@ -1,3 +1,4 @@
+/// <reference path="../deno.d.ts" />
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { GeminiProvider } from "./providers/gemini.ts";
@@ -34,18 +35,18 @@ const noraTools: ToolDeclaration[] = [
   },
   {
     name: "request_human",
-    description: "Request a live handoff to connect the visitor directly with Andy Watson.",
+    description: "Request a live handoff to connect the visitor with our support or technical team, or Andy Watson if explicitly requested.",
     parameters: {
       type: "OBJECT",
       properties: {
-        reason: { type: "STRING", description: "Why the visitor wants to talk with Andy" },
+        reason: { type: "STRING", description: "Why the visitor requested human support" },
         visitor_name: { type: "STRING", description: "Visitor's name if known" }
       }
     }
   }
 ];
 
-serve(async (req) => {
+serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
