@@ -69,7 +69,6 @@ export const Header: React.FC<HeaderProps> = ({ onNavigate, onOpenConcierge, isC
     { label: 'The Lab', id: 'lab' },
     { label: 'Process', id: 'process' },
     { label: 'Philosophy', id: 'philosophy' },
-    { label: 'Impact', id: 'impact' },
   ];
 
   const handleLinkClick = (id: string) => {

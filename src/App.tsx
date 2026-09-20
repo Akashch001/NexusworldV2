@@ -68,9 +68,6 @@ export const App: React.FC = () => {
       case 'philosophy':
         scrollToDistrict(9);
         break;
-      case 'impact':
-        scrollToDistrict(9);
-        break;
       case 'contact':
         scrollToDistrict(10);
         break;
