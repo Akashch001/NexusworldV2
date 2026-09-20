@@ -36,15 +36,17 @@ export function mapIntentToRepresentativeRole(
   const text = `${intent || ''} ${userMessage || ''}`.toLowerCase();
 
 
-  // Founder / Strategic Escalation check
+  // Founder / Strategic Escalation check (requires explicit booking/meeting/talking request or explicit Andy naming)
   const isExplicitAndyRequest =
     text.includes('talk to andy') ||
     text.includes('speak with andy') ||
+    text.includes('meet andy') ||
+    text.includes('book andy') ||
     text.includes('andy watson') ||
-    text.includes('founder') ||
-    text.includes('co-founder') ||
     text.includes('strategic partnership') ||
-    text.includes('board level');
+    text.includes('board level') ||
+    ((text.includes('founder') || text.includes('co-founder')) &&
+      (text.includes('talk') || text.includes('speak') || text.includes('meet') || text.includes('call') || text.includes('book')));
 
   if (isExplicitAndyRequest) {
     return {

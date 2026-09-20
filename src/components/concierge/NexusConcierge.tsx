@@ -46,7 +46,7 @@ const NORA_DEFAULT_SUGGESTIONS = [
   "💰 How much would a project like this cost?",
   "🚀 I’m launching a product — where should I start?",
   "🧭 I’m not sure what I need. Can you help?",
-  "👤 I’d like to talk to Andy"
+  "👤 Can I talk to someone on your team?"
 ];
 
 interface NexusConciergeProps {
@@ -308,6 +308,8 @@ export const NexusConcierge: React.FC<NexusConciergeProps> = ({ isOpen, onClose 
         lower.includes('schedule a call') ||
         lower.includes('schedule appointment') ||
         lower.includes('check availability') ||
+        lower.includes('talk to someone') ||
+        lower.includes('talk to your team') ||
         lower.includes('talk to andy');
 
       if (isBookingRequested) {
@@ -551,7 +553,7 @@ export const NexusConcierge: React.FC<NexusConciergeProps> = ({ isOpen, onClose 
           console.error('AI Backend Error:', err);
           // Still sync client information and user inquiry to Supabase
           syncLeadToSupabase(updatedIntelligence, userMsg.text, undefined);
-          return "My intelligence backend is currently experiencing heavy load or quota limits. Please leave your contact details or try again shortly, and Andy will reach out directly.";
+          return "My intelligence backend is currently experiencing heavy load or quota limits. Please leave your contact details or try again shortly, and our support team will follow up promptly.";
         }
       };
 

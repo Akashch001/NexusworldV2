@@ -19,7 +19,7 @@ export const ProjectBriefView: React.FC<ProjectBriefViewProps> = ({
 
   const briefText = `==================================================
 NEXUS WORLD // PROJECT INTELLIGENCE BRIEF
-Direct Relay to: Andy Watson (Co-Founder, 2026)
+Direct Relay to: NexusWorld Engineering & Support Team
 Domain: nexusworld.in · Contact: connect@nexusworld.in
 ==================================================
 
@@ -85,7 +85,7 @@ Prepared by NEXUS INTELLIGENCE · Coordinated by NORA
             Nexus Project Brief
           </h3>
           <p className="text-zinc-400 text-xs mt-0.5">
-            Structured brief prepared for Andy Watson & the NexusWorld engineering team.
+            Structured brief prepared for the NexusWorld engineering & support team.
           </p>
         </div>
 
