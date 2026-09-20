@@ -1,7 +1,11 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+const globalProcess = (globalThis as unknown as { process?: { env?: Record<string, string> } }).process;
+const env = (typeof import.meta !== 'undefined' && (import.meta as any).env) || globalProcess?.env || {};
+const supabaseUrl = env.VITE_SUPABASE_URL || 'https://eartedmosimwcqqbgbth.supabase.co';
+const supabaseAnonKey = env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_placeholder';
+
+
 
 // If credentials are missing, we log a warning. In a real app we might throw,
 // but for the visual mockup fallback we allow initialization to fail gracefully.

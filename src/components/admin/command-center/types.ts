@@ -41,16 +41,37 @@ export interface VisitorEvent {
   created_at: string;
 }
 
+export type ConversationStatus =
+  | 'ai'
+  | 'human_requested'
+  | 'availability_checking'
+  | 'representative_available'
+  | 'waiting'
+  | 'retrying_availability'
+  | 'next_slot_search'
+  | 'human_notified'
+  | 'appointment_pending'
+  | 'appointment_confirmed'
+  | 'no_representative_available'
+  | 'follow_up_requested'
+  | 'human'
+  | 'closed';
+
 export interface ConversationRecord {
   id: string;
   user_id: string | null;
   visitor_id: string | null;
   project_id: string | null;
   title: string;
-  status: 'ai' | 'human_requested' | 'human' | 'closed';
+  status: ConversationStatus;
   human_requested_at: string | null;
   human_accepted_at: string | null;
   assigned_to: string | null;
+  representative_role?: string | null;
+  retry_count?: number;
+  next_retry_at?: string | null;
+  handoff_reason?: string | null;
+  user_timezone?: string | null;
   created_at: string;
   updated_at: string;
   latest_message?: string;
@@ -61,6 +82,7 @@ export interface ConversationRecord {
     email: string;
   };
 }
+
 
 export interface MessageRecord {
   id: string;

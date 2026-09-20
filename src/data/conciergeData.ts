@@ -83,12 +83,38 @@ export interface ChatMessage {
   isSnapshot?: boolean;
 }
 
-export interface MockTimeSlot {
+export type RepresentativeRole =
+  | 'general_support'
+  | 'sales_discovery'
+  | 'project_discussion'
+  | 'pricing_discussion'
+  | 'technical_consultation'
+  | 'ai_automation'
+  | 'design_discussion'
+  | 'development_discussion'
+  | 'strategic_consultation'
+  | 'founder_escalation'
+  | 'complaint_escalation'
+  | 'urgent_business_request';
+
+export interface AvailableTimeSlot {
   id: string;
-  day: string;
-  date: string;
-  time: string;
+  startUtc: string;
+  endUtc: string;
+  representativeRole: string;
+  representativeName: string;
+  dayName: string;
+  formattedDate: string;
+  formattedTime: string;
+  fullDisplay: string;
+  date?: string;
+  time?: string;
+  day?: string;
 }
+
+
+// Backward compatibility alias
+export type MockTimeSlot = AvailableTimeSlot;
 
 export const INITIAL_INTELLIGENCE: ProjectIntelligence = {
   contact: {
@@ -117,15 +143,9 @@ export const INITIAL_INTELLIGENCE: ProjectIntelligence = {
   intent: 'EXPLORING',
 };
 
-export const MOCK_CALENDAR_SLOTS: MockTimeSlot[] = [
-  { id: 's1', day: 'Tuesday', date: 'Next Tuesday (Sep 15)', time: '10:00 AM EST' },
-  { id: 's2', day: 'Tuesday', date: 'Next Tuesday (Sep 15)', time: '02:30 PM EST' },
-  { id: 's3', day: 'Tuesday', date: 'Next Tuesday (Sep 15)', time: '05:00 PM EST' },
-  { id: 's4', day: 'Wednesday', date: 'Next Wednesday (Sep 16)', time: '11:00 AM EST' },
-  { id: 's5', day: 'Wednesday', date: 'Next Wednesday (Sep 16)', time: '03:00 PM EST' },
-  { id: 's6', day: 'Thursday', date: 'Next Thursday (Sep 17)', time: '01:30 PM EST' },
-  { id: 's7', day: 'Thursday', date: 'Next Thursday (Sep 17)', time: '04:30 PM EST' },
-];
+// Deprecated static array retained only as temporary fallback
+export const MOCK_CALENDAR_SLOTS: AvailableTimeSlot[] = [];
+
 
 /**
  * Calculates how many core project signals have been identified

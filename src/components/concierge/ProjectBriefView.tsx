@@ -46,7 +46,8 @@ Budget Envelope: ${intelligence.project.budget || 'Undisclosed (Optional)'}
 
 [LEAD STATUS]
 Intent Classification: QUALIFIED // HIGH INTENT
-Consultation: ${bookedSlot ? `${bookedSlot.date} at ${bookedSlot.time}` : 'Pending Selection'}
+Consultation: ${bookedSlot ? (bookedSlot.fullDisplay || `${bookedSlot.formattedDate} at ${bookedSlot.formattedTime}`) : 'Pending Selection'}
+
 
 ==================================================
 Prepared by NEXUS INTELLIGENCE · Coordinated by NORA

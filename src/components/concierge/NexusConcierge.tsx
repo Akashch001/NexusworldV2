@@ -2,10 +2,13 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   type ConciergeVisualState,
   type ProjectIntelligence,
+
   type ProgressiveIntentStage,
   type ChatMessage,
   type MockTimeSlot,
+
   type NexusCharacter,
+  type RepresentativeRole,
   INITIAL_INTELLIGENCE,
   NEXUS_CHARACTERS,
   calculateIntelligenceCompletion,
@@ -16,6 +19,16 @@ import { supabase } from '../../lib/supabaseClient';
 import { ConsultationBookingView } from './ConsultationBookingView';
 import { ProjectBriefView } from './ProjectBriefView';
 import { getOrCreateSessionToken } from '../../hooks/useVisitorTelemetry';
+import {
+  detectUserTimezone,
+  getRuntimeDateTimeContext,
+} from '../../lib/dateTimeService';
+import {
+  fetchAvailableSlots,
+  mapIntentToRepresentativeRole,
+  scheduleAvailabilityRetry,
+} from '../../lib/availabilityService';
+
 import {
   X,
   Send,
@@ -46,7 +59,9 @@ export const NexusConcierge: React.FC<NexusConciergeProps> = ({ isOpen, onClose 
   const [intelligence, setIntelligence] = useState<ProjectIntelligence>(INITIAL_INTELLIGENCE);
   const [viewMode, setViewMode] = useState<'chat' | 'booking' | 'brief'>('chat');
   const [bookedSlot, setBookedSlot] = useState<MockTimeSlot | null>(null);
+  const [targetRole, setTargetRole] = useState<RepresentativeRole>('sales_discovery');
   const [mobileIntelligenceOpen, setMobileIntelligenceOpen] = useState<boolean>(false);
+
   const [activeCharacter, setActiveCharacter] = useState<NexusCharacter>('NORA');
 
   const conversationIdRef = useRef<string | null>(null);
@@ -287,13 +302,12 @@ export const NexusConcierge: React.FC<NexusConciergeProps> = ({ isOpen, onClose 
       const isBookingRequested =
         (intelligence.intent === 'CONSULTATION_OFFERED' &&
           (lower.includes('yes') || lower.includes('sure') || lower.includes('sounds good') || lower.includes('ready'))) ||
-        lower.includes('book') ||
-        lower.includes('appointment') ||
-        lower.includes('appoitment') ||
-        lower.includes('schedule') ||
-        lower.includes('calendar') ||
-        lower.includes('meeting') ||
-        lower.includes('consultation') ||
+        lower.includes('book a call') ||
+        lower.includes('book consultation') ||
+        lower.includes('book appointment') ||
+        lower.includes('schedule a call') ||
+        lower.includes('schedule appointment') ||
+        lower.includes('check availability') ||
         lower.includes('talk to andy');
 
       if (isBookingRequested) {
@@ -309,23 +323,53 @@ export const NexusConcierge: React.FC<NexusConciergeProps> = ({ isOpen, onClose 
         if (phoneMatch) updatedIntelligence.contact.phoneNumber = phoneMatch[0];
 
         setIntelligence(updatedIntelligence);
-        setVisualState('BOOKING');
 
-        const bookingReply = "I'd be glad to arrange that for you right away! I'm opening our roadmap consultation calendar so you can select a 30-minute alignment window with Andy Watson.";
-        const aiMsg: ChatMessage = {
-          id: `ai-${Date.now()}`,
-          sender: 'ai',
-          text: bookingReply,
-          timestamp: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
-          intentBadge: 'BOOKING_ENGAGED',
-        };
-        setMessages((prev) => [...prev, aiMsg]);
+        // Map intent to representative role (Andy Watson ONLY if explicit founder escalation requested)
+        const rep = mapIntentToRepresentativeRole(updatedIntelligence.intent, text);
+        setTargetRole(rep.role);
 
-        // Sync lead & message immediately to Supabase
-        syncLeadToSupabase(updatedIntelligence, text, bookingReply);
-        setTimeout(() => setViewMode('booking'), 800);
+        // Verify real availability before offering slots or claiming someone is available
+        const userTz = detectUserTimezone();
+        fetchAvailableSlots(rep.role, userTz, 7, 30).then((availableSlots) => {
+          if (availableSlots && availableSlots.length > 0) {
+            setVisualState('BOOKING');
+            const bookingReply = rep.isAndy
+              ? "I have verified live availability for Andy Watson (Co-Founder). Let me open the founder consultation window so you can select a verified time."
+              : `I checked our team's live availability and found open windows with our ${rep.name}. Let me open the schedule for you.`;
+
+            const aiMsg: ChatMessage = {
+              id: `ai-${Date.now()}`,
+              sender: 'ai',
+              text: bookingReply,
+              timestamp: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+              intentBadge: 'BOOKING_ENGAGED',
+            };
+            setMessages((prev) => [...prev, aiMsg]);
+            syncLeadToSupabase(updatedIntelligence, text, bookingReply);
+            setTimeout(() => setViewMode('booking'), 800);
+          } else {
+            // Honest Fallback - No Slots Available
+            setVisualState('IDLE');
+            const token = getOrCreateSessionToken();
+            if (conversationIdRef.current) {
+              scheduleAvailabilityRetry(conversationIdRef.current, token, rep.role);
+            }
+            const fallbackReply = `I checked for an available representative for ${rep.name}, but everyone is currently tied up with active client builds. I don't want to promise you a time that isn't actually open. I've logged an automatic availability recheck in the background, or you can share your project details and email for prompt human follow-up. What would you prefer?`;
+
+            const aiMsg: ChatMessage = {
+              id: `ai-${Date.now()}`,
+              sender: 'ai',
+              text: fallbackReply,
+              timestamp: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+              intentBadge: 'QUALIFIED',
+            };
+            setMessages((prev) => [...prev, aiMsg]);
+            syncLeadToSupabase(updatedIntelligence, text, fallbackReply);
+          }
+        });
         return;
       }
+
 
       // 2. Check for project context (SaaS, website, AI, etc.)
       let updatedIntelligence = { ...intelligence };
@@ -404,17 +448,19 @@ export const NexusConcierge: React.FC<NexusConciergeProps> = ({ isOpen, onClose 
         newIntent = 'PROJECT_INQUIRY';
       }
 
-      if (!updatedIntelligence.digital.hasWebsite || updatedIntelligence.digital.hasWebsite === 'Unknown') {
+      if (lower.includes('expensive') || lower.includes('premium') || lower.includes('high end')) {
+        aiResponseText = "When you say premium, are you looking for a high-end website, a custom web application, AI automation, or something else?";
+      } else if (!updatedIntelligence.digital.hasWebsite || updatedIntelligence.digital.hasWebsite === 'Unknown') {
         aiResponseText = "Understood. That directly matches what we engineer. Do you currently have an existing website or app, or are we architecting this completely from scratch?";
       } else if (!updatedIntelligence.business.companyName && !updatedIntelligence.contact.fullName) {
-        aiResponseText = "Got it. Before I synthesize the project parameters for Andy Watson, what is your name and company or business name?";
+        aiResponseText = "Got it. Before I synthesize the project parameters for our engineering team, what is your name and company or business name?";
       } else if (!updatedIntelligence.contact.email) {
         newIntent = 'QUALIFIED';
         aiResponseText = `Thank you, ${updatedIntelligence.contact.fullName || 'there'}. What is the best email address to send your technical project brief to? (And optionally, a phone number if preferred for WhatsApp/calls).`;
       } else {
         // High Intent & Snapshot synthesis
         newIntent = 'CONSULTATION_OFFERED';
-        aiResponseText = `Here is what I have synthesized for NexusWorld:\n\n• Entity: ${updatedIntelligence.business.companyName || updatedIntelligence.business.businessType || 'Digital Venture'}\n• Core Need: ${updatedIntelligence.project.need || 'Digital Product Engineering'}\n• Friction: ${updatedIntelligence.project.problem || 'Outdated UX / scalability limitations'}\n• Disciplines: ${updatedIntelligence.project.services.join(', ') || 'UI/UX & Frontend'}\n• Timeline: ${updatedIntelligence.project.timeline}\n\nDoes this accurately represent your goals? If so, would you like to explore scheduling a 30-minute consultation with Andy Watson?`;
+        aiResponseText = `Here is what I have synthesized for NexusWorld:\n\n• Entity: ${updatedIntelligence.business.companyName || updatedIntelligence.business.businessType || 'Digital Venture'}\n• Core Need: ${updatedIntelligence.project.need || 'Digital Product Engineering'}\n• Friction: ${updatedIntelligence.project.problem || 'Outdated UX / scalability limitations'}\n• Disciplines: ${updatedIntelligence.project.services.join(', ') || 'UI/UX & Frontend'}\n• Timeline: ${updatedIntelligence.project.timeline}\n\nDoes this accurately represent your goals? If so, would you like to check our live availability for a consultation?`;
       }
 
       // Generate dynamic response using AI Backend (n8n Webhook with concurrent Supabase lead sync)
@@ -426,11 +472,17 @@ export const NexusConcierge: React.FC<NexusConciergeProps> = ({ isOpen, onClose 
 
           if (n8nWebhook) {
             const visitorToken = getOrCreateSessionToken();
+            const dtContext = getRuntimeDateTimeContext();
             const reqPayload = {
               message: userMsg.text,
               chatInput: userMsg.text,
               sessionId: visitorToken,
+              timezone: dtContext.user_timezone,
+              current_time_utc: dtContext.current_time_utc,
+              current_local_date: dtContext.current_local_date,
+              current_local_time: dtContext.current_local_time,
             };
+
 
             let res: Response | null = null;
             try {
@@ -671,6 +723,7 @@ export const NexusConcierge: React.FC<NexusConciergeProps> = ({ isOpen, onClose 
               <ConsultationBookingView
                 intelligence={intelligence}
                 conversationId={conversationIdRef.current}
+                targetRole={targetRole}
                 onConfirmBooking={(slot) => {
                   setBookedSlot(slot);
                   setIntelligence((prev) => ({ ...prev, intent: 'CONFIRMED' }));
@@ -678,6 +731,7 @@ export const NexusConcierge: React.FC<NexusConciergeProps> = ({ isOpen, onClose 
                 }}
                 onBackToChat={() => setViewMode('chat')}
               />
+
             </div>
           ) : viewMode === 'brief' ? (
             <div className="w-full h-full p-4">

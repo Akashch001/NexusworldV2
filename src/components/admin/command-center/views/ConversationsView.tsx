@@ -32,7 +32,7 @@ export const ConversationsView: React.FC<ConversationsViewProps> = ({
   onRefreshConversations,
   onNavigateToLeads,
 }) => {
-  const [filterState, setFilterState] = useState<'all' | 'human_requested' | 'ai' | 'human' | 'closed'>('all');
+  const [filterState, setFilterState] = useState<'all' | 'waiting' | 'confirmed' | 'human' | 'ai' | 'closed'>('all');
   const [selectedConv, setSelectedConv] = useState<ConversationRecord | null>(null);
   const [messages, setMessages] = useState<MessageRecord[]>([]);
   const [replyText, setReplyText] = useState('');
@@ -48,7 +48,9 @@ export const ConversationsView: React.FC<ConversationsViewProps> = ({
       if (match) setSelectedConv(match);
     } else if (!selectedConv && conversations.length > 0) {
       // Prioritize one waiting for human if available
-      const waiting = conversations.find((c) => c.status === 'human_requested');
+      const waiting = conversations.find(
+        (c) => c.status === 'human_requested' || c.status === 'waiting' || c.status === 'retrying_availability'
+      );
       setSelectedConv(waiting || conversations[0]);
     }
   }, [conversations, selectedConversationId, selectedConv]);
@@ -100,7 +102,6 @@ export const ConversationsView: React.FC<ConversationsViewProps> = ({
             setTimeout(() => {
               const container = messagesEndRef.current?.parentElement;
               if (container) {
-                // Smart auto-scroll: only scroll to bottom if we're already near the bottom
                 const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 150;
                 if (isNearBottom) {
                   messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -121,7 +122,23 @@ export const ConversationsView: React.FC<ConversationsViewProps> = ({
   // Filter conversations
   const filteredConversations = conversations.filter((c) => {
     if (filterState === 'all') return true;
-    return c.status === filterState;
+    if (filterState === 'waiting') {
+      return (
+        c.status === 'human_requested' ||
+        c.status === 'waiting' ||
+        c.status === 'retrying_availability' ||
+        c.status === 'availability_checking' ||
+        c.status === 'no_representative_available' ||
+        c.status === 'follow_up_requested'
+      );
+    }
+    if (filterState === 'confirmed') {
+      return c.status === 'appointment_confirmed' || c.status === 'appointment_pending';
+    }
+    if (filterState === 'human') return c.status === 'human';
+    if (filterState === 'ai') return c.status === 'ai' || c.status === 'representative_available';
+    if (filterState === 'closed') return c.status === 'closed';
+    return true;
   });
 
   // Action: Take Over conversation (Andy takes over live from NORA)
@@ -139,7 +156,6 @@ export const ConversationsView: React.FC<ConversationsViewProps> = ({
         .eq('id', selectedConv.id);
 
       if (!error) {
-        // Post transition notification in chat transcript
         await supabase.from('messages').insert({
           conversation_id: selectedConv.id,
           role: 'system',
@@ -214,10 +230,9 @@ export const ConversationsView: React.FC<ConversationsViewProps> = ({
     setReplyText('');
 
     try {
-      // Insert message as human
       await supabase.from('messages').insert({
         conversation_id: selectedConv.id,
-        role: 'assistant', // Render as assistant bubble in visitor view but with human badge
+        role: 'assistant',
         content,
         metadata: {
           sender: 'human',
@@ -226,7 +241,6 @@ export const ConversationsView: React.FC<ConversationsViewProps> = ({
         },
       });
     } catch {
-      // Revert if failed
       setReplyText(content);
     } finally {
       setIsSending(false);
@@ -235,10 +249,37 @@ export const ConversationsView: React.FC<ConversationsViewProps> = ({
 
   const getStatusBadge = (status: ConversationRecord['status']) => {
     switch (status) {
+      case 'appointment_confirmed':
+        return (
+          <span className="px-2 py-0.5 rounded text-[9px] uppercase font-bold bg-lime-500/20 text-lime-400 border border-lime-500/30">
+            Booked
+          </span>
+        );
+      case 'appointment_pending':
+        return (
+          <span className="px-2 py-0.5 rounded text-[9px] uppercase font-bold bg-cyan-500/20 text-cyan-400 border border-cyan-500/30">
+            Pending Slot
+          </span>
+        );
       case 'human_requested':
+      case 'waiting':
         return (
           <span className="px-2 py-0.5 rounded text-[9px] uppercase font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30 animate-pulse">
             Needs Human
+          </span>
+        );
+      case 'retrying_availability':
+      case 'availability_checking':
+        return (
+          <span className="px-2 py-0.5 rounded text-[9px] uppercase font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+            Checking
+          </span>
+        );
+      case 'no_representative_available':
+      case 'follow_up_requested':
+        return (
+          <span className="px-2 py-0.5 rounded text-[9px] uppercase font-bold bg-rose-500/20 text-rose-400 border border-rose-500/30">
+            Follow-Up
           </span>
         );
       case 'human':
@@ -247,20 +288,28 @@ export const ConversationsView: React.FC<ConversationsViewProps> = ({
             Andy Active
           </span>
         );
-      case 'ai':
-        return (
-          <span className="px-2 py-0.5 rounded text-[9px] uppercase font-bold bg-[#2563EB]/20 text-[#3B82F6] border border-[#2563EB]/30">
-            NORA Active
-          </span>
-        );
       case 'closed':
         return (
           <span className="px-2 py-0.5 rounded text-[9px] uppercase font-bold bg-zinc-800 text-zinc-400 border border-zinc-700">
             Closed
           </span>
         );
+      case 'representative_available':
+        return (
+          <span className="px-2 py-0.5 rounded text-[9px] uppercase font-bold bg-blue-500/20 text-blue-300 border border-blue-500/30">
+            Slot Available
+          </span>
+        );
+      case 'ai':
+      default:
+        return (
+          <span className="px-2 py-0.5 rounded text-[9px] uppercase font-bold bg-[#2563EB]/20 text-[#3B82F6] border border-[#2563EB]/30">
+            NORA Active
+          </span>
+        );
     }
   };
+
 
   return (
     <div className="space-y-4 font-mono h-[calc(100vh-140px)] flex flex-col">
@@ -281,15 +330,28 @@ export const ConversationsView: React.FC<ConversationsViewProps> = ({
           </button>
           <button
             type="button"
-            onClick={() => setFilterState('human_requested')}
+            onClick={() => setFilterState('waiting')}
             className={`px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 ${
-              filterState === 'human_requested'
+              filterState === 'waiting'
                 ? 'bg-amber-500/20 text-amber-300 font-bold border border-amber-500/30'
                 : 'text-zinc-400 hover:text-amber-400'
             }`}
           >
             <Headphones className="w-3.5 h-3.5" />
-            <span>Waiting ({conversations.filter(c => c.status === 'human_requested').length})</span>
+            <span>
+              Waiting ({conversations.filter(c => c.status === 'human_requested' || c.status === 'waiting' || c.status === 'retrying_availability' || c.status === 'no_representative_available' || c.status === 'follow_up_requested').length})
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setFilterState('confirmed')}
+            className={`px-3 py-1.5 rounded-lg transition-colors ${
+              filterState === 'confirmed'
+                ? 'bg-lime-500/20 text-lime-300 font-bold border border-lime-500/30'
+                : 'text-zinc-400 hover:text-lime-400'
+            }`}
+          >
+            Booked ({conversations.filter(c => c.status === 'appointment_confirmed' || c.status === 'appointment_pending').length})
           </button>
           <button
             type="button"
@@ -311,8 +373,9 @@ export const ConversationsView: React.FC<ConversationsViewProps> = ({
                 : 'text-zinc-400 hover:text-white'
             }`}
           >
-            NORA Active ({conversations.filter(c => c.status === 'ai').length})
+            NORA Active ({conversations.filter(c => c.status === 'ai' || c.status === 'representative_available').length})
           </button>
+
         </div>
 
         <div className="text-[11px] text-zinc-400">
@@ -448,9 +511,21 @@ export const ConversationsView: React.FC<ConversationsViewProps> = ({
                       </h3>
                       {getStatusBadge(selectedConv.status)}
                     </div>
-                    <div className="text-[10px] text-zinc-400 mt-0.5">
-                      Started: {new Date(selectedConv.created_at).toLocaleString()}
+                    <div className="flex flex-wrap items-center gap-3 text-[10px] text-zinc-400 mt-0.5">
+                      <span>Started: {new Date(selectedConv.created_at).toLocaleString()}</span>
+                      {selectedConv.representative_role && (
+                        <span className="text-zinc-300">
+                          Role: {selectedConv.representative_role.replace(/_/g, ' ').toUpperCase()}
+                        </span>
+                      )}
+                      {selectedConv.user_timezone && (
+                        <span className="text-zinc-400">TZ: {selectedConv.user_timezone}</span>
+                      )}
+                      {(selectedConv.retry_count || 0) > 0 && (
+                        <span className="text-amber-400 font-bold">Retries: {selectedConv.retry_count}</span>
+                      )}
                     </div>
+
                   </div>
 
                   {/* Operational Action Buttons */}

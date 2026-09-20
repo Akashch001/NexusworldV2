@@ -6,8 +6,10 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "test": "npx tsx tests/modernization.test.ts",
     "lint": "oxlint",
     "preview": "vite preview"
+
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.116.0",
