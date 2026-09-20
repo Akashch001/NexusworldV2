@@ -101,7 +101,7 @@ export const AiMonitoringView: React.FC<AiMonitoringViewProps> = ({
               <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">Active</span>
             </div>
             <p className="text-zinc-400 text-[11px] leading-relaxed">
-              Triggers state machine transition to human handoff, activates Andy Watson's dashboard alert, and pauses NORA responses.
+              Triggers state machine transition to human handoff, activates Command Center team alerts, and routes to the appropriate Nexus team.
             </p>
           </div>
         </div>

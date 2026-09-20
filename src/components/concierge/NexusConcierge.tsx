@@ -209,17 +209,18 @@ export const NexusConcierge: React.FC<NexusConciergeProps> = ({ isOpen, onClose 
         },
         (payload) => {
           const newMsg = payload.new as any;
-          // If human operator (Andy Watson) sent message, display to visitor in real time
+          // If human operator sent message, display to visitor in real time with operator name
           if (newMsg && (newMsg.metadata?.sender === 'human' || newMsg.role === 'system')) {
             setMessages((prev) => {
               if (prev.some((m) => m.id === newMsg.id)) return prev;
               const isOperator = newMsg.metadata?.sender === 'human';
+              const operatorLabel = newMsg.metadata?.sender_name || 'Nexus Team';
               return [
                 ...prev,
                 {
                   id: newMsg.id,
                   sender: 'ai',
-                  text: isOperator ? `[Andy Watson]: ${newMsg.content}` : newMsg.content,
+                  text: isOperator ? `[${operatorLabel}]: ${newMsg.content}` : newMsg.content,
                   timestamp: new Date(newMsg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
                   intentBadge: isOperator ? 'CONSULTATION_OFFERED' : undefined,
                 },

@@ -35,13 +35,28 @@ const noraTools: ToolDeclaration[] = [
   },
   {
     name: "request_human",
-    description: "Request a live handoff to connect the visitor with our support or technical team, or Andy Watson if explicitly requested.",
+    description: "Request a live handoff to connect the visitor with the appropriate Nexus team (or founder escalation ONLY if explicitly requested by name).",
     parameters: {
       type: "OBJECT",
       properties: {
-        reason: { type: "STRING", description: "Why the visitor requested human support" },
-        visitor_name: { type: "STRING", description: "Visitor's name if known" }
-      }
+        reason: { type: "STRING", description: "Why the visitor requested human support or assistance" },
+        visitor_name: { type: "STRING", description: "Visitor's name if known" },
+        requested_team: {
+          type: "STRING",
+          description: "Which team to route to: 'sales', 'support', 'technical', 'design', 'development', 'ai_automation', 'project', 'general', or 'founder'. Default MUST NEVER be 'founder'.",
+          enum: ["sales", "support", "technical", "design", "development", "ai_automation", "project", "general", "founder"]
+        },
+        request_type: {
+          type: "STRING",
+          description: "Type of request: inquiry, quote, technical_issue, discovery, feedback, escalation"
+        },
+        urgency: {
+          type: "STRING",
+          description: "Urgency level: low, normal, high",
+          enum: ["low", "normal", "high"]
+        }
+      },
+      required: ["requested_team"]
     }
   }
 ];
@@ -174,20 +189,33 @@ serve(async (req: Request) => {
       }
     }
 
-    // 2. Check Andy's Live Availability Presence
-    const { data: onlineAdmin } = await serviceClient
+    // 2. Check Team Live Availability Presence (representative / team model)
+    const { data: onlineTeamMember } = await serviceClient
       .from('profiles')
-      .select('id, display_name, is_online')
-      .in('role', ['admin', 'owner'])
+      .select('id, display_name, is_online, role')
       .eq('is_online', true)
       .limit(1)
       .maybeSingle();
 
-    const isAndyOnline = Boolean(onlineAdmin);
+    const isTeamOnline = Boolean(onlineTeamMember);
+
+    // Founder presence is checked ONLY if an explicit founder escalation is requested
+    const isFounderOnline = Boolean(
+      onlineTeamMember && (onlineTeamMember.role === 'owner' || onlineTeamMember.role === 'admin')
+    );
 
     // 3. Assemble Memory & Context
     let userMemoriesText = "";
     let projectMemoriesText = "";
+
+    // Canonical Organizational Memory Rule (Strictly overrides any legacy stale memories)
+    const canonicalMemoryRule = `CANONICAL MEMORY RULE (OVERRIDES ANY OLD MEMORIES):
+Andy Watson is a Co-Founder of Nexus World.
+Andy is NOT the default customer representative.
+NORA must use the appropriate Nexus team for normal customer assistance.
+Normal requests should be routed to sales, support, technical, design, development, project, or another appropriate team.
+NORA must not proactively mention Andy.
+Andy may only be mentioned when the customer explicitly asks about Andy or explicitly requests to speak with him.`;
 
     if (userId) {
       const { data: userMemories } = await serviceClient
@@ -199,7 +227,20 @@ serve(async (req: Request) => {
         .limit(5);
 
       if (userMemories && userMemories.length > 0) {
-        userMemoriesText = "User Long-Term Preferences:\n" + userMemories.map((m: { content: string }) => `- ${m.content}`).join("\n");
+        // Sanitize out stale legacy memories prescribing Andy as default customer rep
+        const sanitizedMemories = userMemories
+          .map((m: { content: string }) => m.content)
+          .filter((content: string) => {
+            const lower = content.toLowerCase();
+            const isStaleAndyRep =
+              (lower.includes('andy') || lower.includes('watson')) &&
+              (lower.includes('contact') || lower.includes('handles') || lower.includes('reach out') || lower.includes('representative') || lower.includes('call'));
+            return !isStaleAndyRep;
+          });
+
+        if (sanitizedMemories.length > 0) {
+          userMemoriesText = "User Long-Term Preferences:\n" + sanitizedMemories.map((c: string) => `- ${c}`).join("\n");
+        }
       }
     }
 
@@ -212,7 +253,19 @@ serve(async (req: Request) => {
         .limit(10);
 
       if (projectMemories && projectMemories.length > 0) {
-        projectMemoriesText = "Project Context & Decisions:\n" + projectMemories.map((m: { content: string }) => `- ${m.content}`).join("\n");
+        const sanitizedProjectMemories = projectMemories
+          .map((m: { content: string }) => m.content)
+          .filter((content: string) => {
+            const lower = content.toLowerCase();
+            const isStaleAndyRep =
+              (lower.includes('andy') || lower.includes('watson')) &&
+              (lower.includes('contact') || lower.includes('handles') || lower.includes('reach out') || lower.includes('representative'));
+            return !isStaleAndyRep;
+          });
+
+        if (sanitizedProjectMemories.length > 0) {
+          projectMemoriesText = "Project Context & Decisions:\n" + sanitizedProjectMemories.map((c: string) => `- ${c}`).join("\n");
+        }
       }
     }
 
@@ -391,26 +444,97 @@ serve(async (req: Request) => {
       }
 
       if (name === 'request_human') {
-        if (!isAndyOnline) {
-          console.log('Human requested but Andy is offline');
+        const requestedTeam = (args.requested_team || 'support').toLowerCase();
+        const isFounderRequest = requestedTeam === 'founder' || (args.reason && args.reason.toLowerCase().includes('andy'));
+
+        // Default routing must NEVER be founder unless explicitly requested by the customer
+        if (isFounderRequest) {
+          if (!isFounderOnline) {
+            console.log('Explicit founder requested but founder is offline');
+            return {
+              success: false,
+              team: 'founder',
+              available: false,
+              message: "Andy Watson isn't available right now for live chat, but our team will log your details and ensure he receives your project summary."
+            };
+          }
+
+          if (currentConversationId) {
+            await serviceClient
+              .from('conversations')
+              .update({
+                status: 'human_requested',
+                representative_role: 'founder_escalation',
+                human_requested_at: new Date().toISOString(),
+                handoff_reason: args.reason || 'Explicit founder request'
+              })
+              .eq('id', currentConversationId);
+
+            const { data: lead } = await serviceClient
+              .from('leads')
+              .select('id')
+              .eq('conversation_id', currentConversationId)
+              .maybeSingle();
+
+            if (lead) {
+              await serviceClient.from('lead_events').insert({
+                lead_id: lead.id,
+                conversation_id: currentConversationId,
+                event_type: 'human_requested',
+                metadata: {
+                  requested_team: 'founder',
+                  reason: args.reason || 'Visitor explicitly requested Andy Watson'
+                }
+              });
+            }
+          }
+
           return {
-            success: false,
-            andy_online: false,
-            message: "Andy isn't available right now for live chat, but you can capture their email and project summary so Andy can follow up promptly."
+            success: true,
+            team: 'founder',
+            available: true,
+            message: "Founder escalation noted. Andy has been notified in the Control Room and will connect if available."
           };
         }
 
-        // Andy is online - initiate handoff state
+        // Normal customer routing to appropriate Nexus team
+        const targetRole =
+          requestedTeam === 'technical' || requestedTeam === 'development'
+            ? 'technical_consultation'
+            : requestedTeam === 'ai_automation'
+            ? 'ai_engineering'
+            : requestedTeam === 'design'
+            ? 'design_direction'
+            : requestedTeam === 'sales' || requestedTeam === 'project'
+            ? 'sales_discovery'
+            : 'support';
+
+        const teamLabel =
+          requestedTeam === 'technical'
+            ? 'technical team'
+            : requestedTeam === 'sales'
+            ? 'sales team'
+            : requestedTeam === 'design'
+            ? 'design team'
+            : requestedTeam === 'development'
+            ? 'development team'
+            : requestedTeam === 'ai_automation'
+            ? 'AI engineering team'
+            : requestedTeam === 'project'
+            ? 'project strategy team'
+            : 'support team';
+
         if (currentConversationId) {
           await serviceClient
             .from('conversations')
             .update({
-              status: 'human_requested',
-              human_requested_at: new Date().toISOString()
+              status: isTeamOnline ? 'human_requested' : 'availability_checking',
+              representative_role: targetRole,
+              human_requested_at: new Date().toISOString(),
+              handoff_reason: args.reason || `Handoff to ${teamLabel}`
             })
             .eq('id', currentConversationId);
 
-          // Find lead associated to record event
           const { data: lead } = await serviceClient
             .from('leads')
             .select('id')
@@ -422,16 +546,22 @@ serve(async (req: Request) => {
               lead_id: lead.id,
               conversation_id: currentConversationId,
               event_type: 'human_requested',
-              metadata: { reason: args.reason || 'Visitor requested to speak with Andy' }
+              metadata: {
+                requested_team: requestedTeam,
+                target_role: targetRole,
+                reason: args.reason || `Routing to ${teamLabel}`
+              }
             });
           }
         }
 
-        console.log('Live human request initiated. Andy notified.');
         return {
           success: true,
-          andy_online: true,
-          message: "Live handoff requested. Andy has been notified in the NexusWorld Control Room and will connect shortly."
+          team: requestedTeam,
+          available: isTeamOnline,
+          message: isTeamOnline
+            ? `I've alerted our ${teamLabel}. Someone from our team will connect with you shortly.`
+            : `Our ${teamLabel} has received your inquiry. I can help find the next available time or take your details for follow-up.`
         };
       }
 
@@ -499,7 +629,8 @@ serve(async (req: Request) => {
           conversationId: currentConversationId,
           visitorId: visitorId,
           status: convStatus,
-          andyOnline: isAndyOnline,
+          teamOnline: isTeamOnline,
+          andyOnline: isFounderOnline,
           lead: leadCaptureResult
         }),
         {
@@ -511,6 +642,17 @@ serve(async (req: Request) => {
 
     // 6. Build NORA System Prompt (Identity, Personality, Lore, and Directives)
     const systemPrompt = `You are NORA, the digital intelligence layer and conversational brain of NexusWorld (https://nexusworld.in).
+
+${canonicalMemoryRule}
+
+HARD BLOCK — NO PROACTIVE ANDY MENTIONS:
+Andy Watson is a Co-Founder of Nexus World.
+Andy is NOT the default customer representative.
+NORA MUST NOT proactively mention Andy Watson in normal customer conversations.
+NORA MUST NOT route normal sales, support, technical, design, development, project, pricing, or appointment requests to Andy.
+Use team-based language instead.
+The existence of an online admin/owner must NEVER be interpreted as Andy being available.
+Andy may only be mentioned when the customer explicitly asks about Andy or explicitly requests to speak with Andy.
 
 ORGANIZATIONAL MEMORY & CO-FOUNDER IDENTITY:
 - Andy Watson is a Co-Founder of Nexus World.
@@ -591,7 +733,8 @@ ${uiContextText}`;
           conversationId: currentConversationId,
           visitorId: visitorId,
           status: convStatus,
-          andyOnline: isAndyOnline,
+          teamOnline: isTeamOnline,
+          andyOnline: isFounderOnline,
           lead: leadCaptureResult
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
@@ -643,7 +786,8 @@ ${uiContextText}`;
           conversationId: currentConversationId,
           visitorId: visitorId,
           status: convStatus,
-          andyOnline: isAndyOnline,
+          teamOnline: isTeamOnline,
+          andyOnline: isFounderOnline,
           lead: leadCaptureResult
         }),
         {
@@ -659,7 +803,8 @@ ${uiContextText}`;
           conversationId: currentConversationId,
           visitorId: visitorId,
           status: convStatus,
-          andyOnline: isAndyOnline,
+          teamOnline: isTeamOnline,
+          andyOnline: isFounderOnline,
           lead: leadCaptureResult
         }),
         {

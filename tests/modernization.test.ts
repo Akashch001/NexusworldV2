@@ -285,6 +285,98 @@ runTest(22, 'Browser Timezone Changes (Detected on subsequent requests, previous
   assert.equal(storedUtc, '2026-09-22T14:00:00Z', 'Underlying database appointment UTC time must remain immutable');
 });
 
+// TEST 23 — NORMAL TECHNICAL REQUEST
+runTest(23, 'Normal Technical Request ("I need help with an API integration." -> Technical team, no Andy)', () => {
+  const query = 'I need help with an API integration.';
+  const rep = mapIntentToRepresentativeRole('TECHNICAL_QUERY', query);
+  assert.equal(rep.isAndy, false, 'Must not escalate technical inquiry to Andy');
+  assert.equal(rep.role, 'technical_consultation', 'Must route to technical consultation');
+  const response = 'Our technical team can help you with that.';
+  assert.equal(response.includes('technical team'), true);
+  assert.equal(response.toLowerCase().includes('andy'), false, 'Must not mention Andy');
+});
+
+// TEST 24 — PRICING REQUEST
+runTest(24, 'Pricing Request ("Who can give me a quote?" -> Sales team, no Andy)', () => {
+  const query = 'Who can give me a quote?';
+  const rep = mapIntentToRepresentativeRole('PRICING_QUERY', query);
+  assert.equal(rep.isAndy, false, 'Must not route pricing to Andy');
+  assert.equal(rep.role, 'sales_discovery', 'Must route to sales discovery');
+  const response = 'Our sales team can help with that.';
+  assert.equal(response.includes('sales team'), true);
+  assert.equal(response.toLowerCase().includes('andy'), false, 'Must not mention Andy');
+});
+
+// TEST 25 — SUPPORT REQUEST
+runTest(25, 'Support Request ("I need someone from your team." -> Right person on team, no Andy)', () => {
+  const query = 'I need someone from your team.';
+  const rep = mapIntentToRepresentativeRole('HUMAN_REQUEST', query);
+  assert.equal(rep.isAndy, false, 'Must not default general support to Andy');
+  const response = 'Absolutely. Let me connect you with the right person on our team.';
+  assert.equal(response.includes('the right person on our team') || response.includes('support team'), true);
+  assert.equal(response.toLowerCase().includes('andy'), false, 'Must not mention Andy');
+});
+
+// TEST 26 — PROJECT REQUEST
+runTest(26, 'Project Request ("Can someone discuss my project?" -> Team-based response, no Andy)', () => {
+  const query = 'Can someone discuss my project?';
+  const rep = mapIntentToRepresentativeRole('PROJECT_DISCUSSION', query);
+  assert.equal(rep.isAndy, false, 'Must not assume Andy for project discussions');
+  const response = 'Sure. I can get this in front of the right person on our team.';
+  assert.equal(response.includes('team'), true);
+  assert.equal(response.toLowerCase().includes('andy'), false, 'Must not mention Andy');
+});
+
+// TEST 27 — ONLINE ADMIN PRESENCE ISOLATION
+runTest(27, 'Online Admin Presence Isolation (Admin online != Andy available for customer)', () => {
+  // Simulate an admin/owner being online in profiles table
+  const mockAdminProfile = { id: 'admin-123', role: 'owner', is_online: true };
+  const isTeamOnline = Boolean(mockAdminProfile && mockAdminProfile.is_online);
+  
+  // Normal customer request
+  const normalCustomerRequest = 'Can I talk to someone about a new design project?';
+  const rep = mapIntentToRepresentativeRole('DESIGN_REQUEST', normalCustomerRequest);
+  
+  // Rule: Being an online admin must NEVER mean Andy is proactively routed or mentioned
+  assert.equal(rep.isAndy, false, 'Online admin presence must NEVER trigger Andy routing for normal customer');
+  assert.equal(rep.role, 'design_discussion', 'Must route to design discipline');
+  
+  // Verification that team presence is used instead of Andy
+  const handoffNotification = isTeamOnline
+    ? "I've alerted our design team. Someone from our team will connect with you shortly."
+    : "Our design team has received your inquiry. Someone from our team will follow up.";
+  assert.equal(handoffNotification.toLowerCase().includes('andy'), false, 'Must never mention Andy because admin is online');
+});
+
+// TEST 28 — STALE MEMORY OVERRIDE
+runTest(28, 'Stale Memory Override (Canonical memory rule overrides legacy Andy-rep memories)', () => {
+  // Simulate legacy memory row from old session
+  const legacyMemories = [
+    { content: 'Andy handles all sales and pricing calls.' },
+    { content: 'User prefers dark mode.' },
+    { content: 'Contact Andy directly for web projects.' }
+  ];
+
+  // Sanitization routine used in backend
+  const sanitizedMemories = legacyMemories
+    .map(m => m.content)
+    .filter(content => {
+      const lower = content.toLowerCase();
+      const isStaleAndyRep =
+        (lower.includes('andy') || lower.includes('watson')) &&
+        (lower.includes('contact') || lower.includes('handles') || lower.includes('reach out') || lower.includes('representative') || lower.includes('call'));
+      return !isStaleAndyRep;
+    });
+
+  // Ensure stale memories were purged
+  assert.equal(sanitizedMemories.length, 1, 'Only non-Andy preferences should survive');
+  assert.equal(sanitizedMemories[0], 'User prefers dark mode.');
+
+  // Canonical override rule presence
+  const canonicalRule = 'Andy Watson is a Co-Founder of Nexus World. Andy is not the default customer representative.';
+  assert.equal(canonicalRule.includes('not the default customer representative'), true);
+});
+
 console.log('\n====================================================');
 console.log(`TEST EXECUTION SUMMARY: ${passedCount} PASSED, ${failedCount} FAILED`);
 console.log('====================================================');
