@@ -88,17 +88,37 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
           <div>
             <div className="telemetry-tag text-zinc-400 mb-4">THE LAB // REAL WORK</div>
             <ul className="space-y-2.5 text-zinc-400 font-mono text-[11px]">
-              <li className="flex items-center justify-between">
-                <span>Nexus Site Check</span>
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">PROTOTYPE</span>
+              <li>
+                <button
+                  onClick={() => onNavigate('lab')}
+                  className="flex items-center justify-between w-full hover:text-white transition-colors text-left focus:outline-none"
+                >
+                  <span>Nexus Site Check</span>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">PROTOTYPE</span>
+                </button>
               </li>
-              <li className="flex items-center justify-between">
-                <span>NexusCV</span>
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20">IN DEV</span>
+              <li>
+                <a
+                  href="https://nexuscv.nexusworld.in/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-between w-full hover:text-white transition-colors text-left group focus:outline-none"
+                >
+                  <span className="flex items-center gap-1">
+                    NexusCV
+                    <ArrowUpRight className="w-3 h-3 text-zinc-500 group-hover:text-white transition-colors" />
+                  </span>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20">LIVE APP ↗</span>
+                </a>
               </li>
-              <li className="flex items-center justify-between">
-                <span>Workflow State Engine</span>
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-400 border border-purple-500/20">EXPERIMENT</span>
+              <li>
+                <button
+                  onClick={() => onNavigate('lab')}
+                  className="flex items-center justify-between w-full hover:text-white transition-colors text-left focus:outline-none"
+                >
+                  <span>Workflow State Engine</span>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-400 border border-purple-500/20">EXPERIMENT</span>
+                </button>
               </li>
             </ul>
           </div>

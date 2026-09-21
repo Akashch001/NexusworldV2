@@ -148,6 +148,9 @@ export const Philosophy: React.FC = () => {
                       <span className="text-signal-bright font-bold">{systemScale}x</span>
                     </div>
                     <input
+                      id="global-token-scale"
+                      name="globalTokenScale"
+                      aria-label="Global Spatial Token Scale"
                       type="range"
                       min="0.8"
                       max="1.3"

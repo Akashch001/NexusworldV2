@@ -68,7 +68,7 @@ export const NexusSiteCheckDemo: React.FC = () => {
       {/* URL Input Bar */}
       <div className="mt-6">
         <div className="text-xs font-mono text-zinc-400 mb-2 flex items-center justify-between">
-          <span>ENTER DOMAIN OR URL TO INSPECT:</span>
+          <label htmlFor="site-audit-input">ENTER DOMAIN OR URL TO INSPECT:</label>
           <span className="text-zinc-500">HTTPS VERIFIED</span>
         </div>
 
@@ -76,7 +76,10 @@ export const NexusSiteCheckDemo: React.FC = () => {
           <div className="relative flex-1">
             <Search className="w-4 h-4 text-zinc-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
             <input
+              id="site-audit-input"
+              name="siteAuditInput"
               type="text"
+              aria-label="Domain or URL to inspect"
               value={urlInput}
               onChange={(e) => setUrlInput(e.target.value)}
               placeholder="e.g. yourcompany.com"

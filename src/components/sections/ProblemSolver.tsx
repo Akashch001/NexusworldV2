@@ -4,7 +4,7 @@ import { HelpCircle } from 'lucide-react';
 
 export const ProblemSolver: React.FC = () => {
   return (
-    <section id="impact" className="py-24 relative border-t border-white/[0.06] bg-void">
+    <section id="problems" data-section="problems" className="py-24 relative border-t border-white/[0.06] bg-void">
       <div className="max-w-7xl mx-auto px-6 lg:px-12">
         
         {/* Section Header */}

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { CAPABILITIES, type Capability } from '../../data/companyData';
 import { Layers, ArrowRight, CheckCircle, Code, Sparkles, Palette, Target } from 'lucide-react';
+import { CapabilityPixelVisualizer } from './capabilities/CapabilityPixelVisualizer';
 
 export const Capabilities: React.FC = () => {
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
@@ -68,12 +69,15 @@ export const Capabilities: React.FC = () => {
           <div className="lg:col-span-7 grid grid-cols-1 sm:grid-cols-2 gap-4">
             {filteredCapabilities.map((cap) => {
               const isSelected = activeCapability.id === cap.id;
+              const isSingle = filteredCapabilities.length === 1;
               const Icon = getCategoryIcon(cap.category);
               return (
                 <div
                   key={cap.id}
                   onClick={() => setActiveCapability(cap)}
                   className={`cursor-pointer rounded-xl p-5 border transition-all duration-300 relative group flex flex-col justify-between ${
+                    isSingle ? 'sm:col-span-2' : ''
+                  } ${
                     isSelected
                       ? 'bg-void-surface border-signal shadow-[0_0_20px_rgba(37,99,235,0.2)]'
                       : 'bg-void-card/60 border-white/[0.06] hover:border-white/20 hover:bg-void-card'
@@ -97,6 +101,13 @@ export const Capabilities: React.FC = () => {
                     <p className="text-zinc-400 text-sm md:text-base leading-relaxed line-clamp-2">
                       {cap.subtitle}
                     </p>
+
+                    {/* Animated Pixel-Art Showcase */}
+                    <CapabilityPixelVisualizer
+                      capabilityId={cap.id}
+                      category={cap.category}
+                      isSelected={isSelected}
+                    />
                   </div>
 
                   <div className="mt-4 pt-3 border-t border-white/[0.04] flex items-center justify-between text-[11px] font-mono text-zinc-500">

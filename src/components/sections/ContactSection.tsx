@@ -200,10 +200,12 @@ export const ContactSection: React.FC = () => {
             {/* 3. Contact Details */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="text-[11px] font-mono text-zinc-400 uppercase tracking-wider block mb-1.5">
+                <label htmlFor="clientName" className="text-[11px] font-mono text-zinc-400 uppercase tracking-wider block mb-1.5">
                   Your Name / Entity:
                 </label>
                 <input
+                  id="clientName"
+                  name="clientName"
                   type="text"
                   required
                   value={clientName}
@@ -214,10 +216,12 @@ export const ContactSection: React.FC = () => {
               </div>
 
               <div>
-                <label className="text-[11px] font-mono text-zinc-400 uppercase tracking-wider block mb-1.5">
+                <label htmlFor="clientEmail" className="text-[11px] font-mono text-zinc-400 uppercase tracking-wider block mb-1.5">
                   Your Contact Email:
                 </label>
                 <input
+                  id="clientEmail"
+                  name="clientEmail"
                   type="email"
                   required
                   value={clientEmail}
@@ -228,10 +232,12 @@ export const ContactSection: React.FC = () => {
               </div>
 
               <div>
-                <label className="text-[11px] font-mono text-zinc-400 uppercase tracking-wider block mb-1.5">
+                <label htmlFor="clientPhone" className="text-[11px] font-mono text-zinc-400 uppercase tracking-wider block mb-1.5">
                   Phone / Whatsapp:
                 </label>
                 <input
+                  id="clientPhone"
+                  name="clientPhone"
                   type="tel"
                   required
                   value={clientPhone}
@@ -244,10 +250,12 @@ export const ContactSection: React.FC = () => {
 
             {/* 4. Notes */}
             <div>
-              <label className="text-[11px] font-mono text-zinc-400 uppercase tracking-wider block mb-1.5">
+              <label htmlFor="projectDescription" className="text-[11px] font-mono text-zinc-400 uppercase tracking-wider block mb-1.5">
                 Brief Description of the Problem / Product:
               </label>
               <textarea
+                id="projectDescription"
+                name="projectDescription"
                 rows={3}
                 value={projectDescription}
                 onChange={(e) => setProjectDescription(e.target.value)}

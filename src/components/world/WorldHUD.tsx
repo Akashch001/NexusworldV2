@@ -23,8 +23,8 @@ export const WorldHUD: React.FC<WorldHUDProps> = ({
   return (
     <div className="relative z-10 w-full pointer-events-none">
       
-      {/* SECTION 00 & 01: THE VOID & SIGNAL (Hero Entrance) */}
-      <section className="min-h-screen flex flex-col justify-center px-6 lg:px-16 pt-24 pb-16 relative">
+      {/* SECTION 00: THE VOID & SIGNAL (Hero Entrance) */}
+      <section id="hero" className="min-h-screen flex flex-col justify-center px-6 lg:px-16 pt-24 pb-16 relative">
         <div className="max-w-4xl pointer-events-auto">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-void-card/90 border border-white/[0.08] backdrop-blur-md mb-6 shadow-sm">
             <span className="w-2 h-2 rounded-full bg-signal animate-pulse" />
@@ -50,7 +50,7 @@ export const WorldHUD: React.FC<WorldHUDProps> = ({
 
           <div className="flex flex-wrap items-center gap-4">
             <button
-              onClick={() => onJumpToDistrict(10)}
+              onClick={() => onJumpToDistrict(7)}
               className="inline-flex items-center gap-2.5 px-6 py-3.5 rounded-lg bg-signal hover:bg-signal-bright text-white text-xs font-semibold uppercase tracking-wider transition-all shadow-[0_0_20px_rgba(37,99,235,0.4)]"
             >
               <span>Start a Project</span>
@@ -58,7 +58,7 @@ export const WorldHUD: React.FC<WorldHUDProps> = ({
             </button>
 
             <button
-              onClick={() => onJumpToDistrict(8)}
+              onClick={() => onJumpToDistrict(4)}
               className="inline-flex items-center gap-2.5 px-6 py-3.5 rounded-lg bg-void-card/80 hover:bg-void-surface text-zinc-300 hover:text-white border border-white/[0.1] text-xs font-semibold uppercase tracking-wider backdrop-blur-md transition-all"
             >
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
@@ -73,11 +73,11 @@ export const WorldHUD: React.FC<WorldHUDProps> = ({
         </div>
       </section>
 
-      {/* SECTION 02 & 03: NEXUS CORE & ARCHITECTURAL FOUNDATION */}
-      <section className="min-h-screen flex flex-col justify-center px-6 lg:px-16 py-20 relative">
+      {/* SECTION 01: NEXUS CORE & ARCHITECTURAL FOUNDATION */}
+      <section id="core" className="min-h-screen flex flex-col justify-center px-6 lg:px-16 py-20 relative">
         <div className="max-w-3xl pointer-events-auto bg-void-card/85 backdrop-blur-xl p-8 lg:p-12 rounded-2xl border border-white/[0.08] shadow-2xl">
           <div className="flex items-center gap-2 mb-4">
-            <span className="telemetry-tag text-signal">02 // NEXUS CORE ARCHITECTURE</span>
+            <span className="telemetry-tag text-signal">01 // NEXUS CORE ARCHITECTURE</span>
             <span className="text-zinc-700">·</span>
             <span className="text-xs font-mono text-zinc-500">SYSTEM COUPLING</span>
           </div>
@@ -101,23 +101,23 @@ export const WorldHUD: React.FC<WorldHUDProps> = ({
         </div>
       </section>
 
-      {/* SECTION 04 & 05: CAPABILITIES (DESIGN & DEVELOPMENT DISTRICTS) */}
+      {/* SECTION 02: CAPABILITIES */}
       <div className="pointer-events-auto">
         <Capabilities />
       </div>
 
-      {/* SECTION 06 & 07: CONNECTED PROCESS PIPELINE */}
+      {/* SECTION 03: CONNECTED PROCESS PIPELINE */}
       <div className="pointer-events-auto">
         <Process />
       </div>
 
-      {/* SECTION 08: THE LAB (REAL WORK PRODUCT DEMOS) */}
+      {/* SECTION 04: THE LAB (REAL WORK PRODUCT DEMOS) */}
       <section id="lab" className="min-h-screen py-24 px-6 lg:px-16 relative">
         <div className="max-w-7xl mx-auto pointer-events-auto">
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-12 border-b border-white/[0.06] mb-8">
             <div>
               <div className="flex items-center gap-2 mb-3">
-                <span className="telemetry-tag text-signal">08 // THE LAB</span>
+                <span className="telemetry-tag text-signal">04 // THE LAB</span>
                 <span className="text-zinc-700">·</span>
                 <span className="text-xs font-mono text-zinc-500">PROVING CAPABILITY THROUGH REAL SYSTEMS</span>
               </div>
@@ -165,17 +165,17 @@ export const WorldHUD: React.FC<WorldHUDProps> = ({
         </div>
       </section>
 
-      {/* SECTION 09: FIRST PRINCIPLES & PHILOSOPHY */}
+      {/* SECTION 05: FIRST PRINCIPLES & PHILOSOPHY */}
       <div className="pointer-events-auto">
         <Philosophy />
       </div>
 
-      {/* SECTION 10: PROBLEMS WE SOLVE */}
+      {/* SECTION 06: PROBLEMS WE SOLVE */}
       <div className="pointer-events-auto">
         <ProblemSolver />
       </div>
 
-      {/* SECTION 11: FINAL NEXUS & CONTACT */}
+      {/* SECTION 07: FINAL NEXUS & CONTACT */}
       <div className="pointer-events-auto">
         <ContactSection />
       </div>

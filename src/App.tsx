@@ -52,28 +52,40 @@ export const App: React.FC = () => {
   }
 
   const handleHeaderNavigate = (sectionId: string) => {
+    const el = document.getElementById(sectionId);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth' });
+      return;
+    }
+
     switch (sectionId) {
       case 'hero':
         scrollToDistrict(0);
         break;
-      case 'capabilities':
-        scrollToDistrict(4);
+      case 'core':
+        scrollToDistrict(1);
         break;
-      case 'lab':
-        scrollToDistrict(8);
+      case 'capabilities':
+        scrollToDistrict(2);
         break;
       case 'process':
-        scrollToDistrict(6);
+        scrollToDistrict(3);
+        break;
+      case 'lab':
+        scrollToDistrict(4);
         break;
       case 'philosophy':
-        scrollToDistrict(9);
+        scrollToDistrict(5);
+        break;
+      case 'problems':
+      case 'impact':
+        scrollToDistrict(6);
         break;
       case 'contact':
-        scrollToDistrict(10);
+        scrollToDistrict(7);
         break;
       default:
-        const el = document.getElementById(sectionId);
-        if (el) el.scrollIntoView({ behavior: 'smooth' });
+        break;
     }
   };
 
