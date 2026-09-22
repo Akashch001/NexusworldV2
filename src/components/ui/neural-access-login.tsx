@@ -72,7 +72,8 @@ export const NeuralAccessLogin: React.FC<NeuralAccessLoginProps> = ({ onExit }) 
       }
 
       // 2. Check administrative role clearance
-      if (!['owner', 'admin'].includes(profile.role)) {
+      const normalizedRole = (profile.role || '').toLowerCase();
+      if (!['owner', 'super_admin', 'admin', 'agent'].includes(normalizedRole)) {
         await supabase.auth.signOut();
         setErrorMessage('Access to the NexusWorld Control Room is restricted to authorized personnel.');
         setAuthorizedProfile(null);

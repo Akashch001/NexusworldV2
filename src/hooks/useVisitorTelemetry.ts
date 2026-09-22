@@ -42,22 +42,32 @@ function getOSName(): string {
 
 export function getOrCreateSessionId(): string {
   if (typeof window === 'undefined') return crypto.randomUUID();
-  let id = sessionStorage.getItem(SESSION_ID_KEY);
-  if (!id) {
-    id = crypto.randomUUID();
-    sessionStorage.setItem(SESSION_ID_KEY, id);
+  try {
+    let id = localStorage.getItem(SESSION_ID_KEY) || sessionStorage.getItem(SESSION_ID_KEY);
+    if (!id) {
+      id = crypto.randomUUID();
+      localStorage.setItem(SESSION_ID_KEY, id);
+      sessionStorage.setItem(SESSION_ID_KEY, id);
+    }
+    return id;
+  } catch {
+    return crypto.randomUUID();
   }
-  return id;
 }
 
 export function getOrCreateSessionToken(): string {
   if (typeof window === 'undefined') return 'anonymous_server';
-  let token = sessionStorage.getItem(SESSION_TOKEN_KEY);
-  if (!token) {
-    token = `ses_${crypto.randomUUID()}`;
-    sessionStorage.setItem(SESSION_TOKEN_KEY, token);
+  try {
+    let token = localStorage.getItem(SESSION_TOKEN_KEY) || sessionStorage.getItem(SESSION_TOKEN_KEY);
+    if (!token) {
+      token = `ses_${crypto.randomUUID()}`;
+      localStorage.setItem(SESSION_TOKEN_KEY, token);
+      sessionStorage.setItem(SESSION_TOKEN_KEY, token);
+    }
+    return token;
+  } catch {
+    return 'anonymous_client';
   }
-  return token;
 }
 
 export function useVisitorTelemetry(currentDistrictIndex?: number) {
@@ -110,7 +120,26 @@ export function useVisitorTelemetry(currentDistrictIndex?: number) {
       try {
         const isRegistered = sessionStorage.getItem(SESSION_REGISTERED_KEY) === 'true';
 
-        let geoData = { ip: 'Unknown', country_name: null, country_code: null, city: null };
+        let geoData: {
+          ip: string;
+          country_name: string | null;
+          country_code: string | null;
+          city: string | null;
+          region: string | null;
+          latitude: number | null;
+          longitude: number | null;
+          timezone: string | null;
+        } = {
+          ip: 'Unknown',
+          country_name: null,
+          country_code: null,
+          city: null,
+          region: null,
+          latitude: null,
+          longitude: null,
+          timezone: null,
+        };
+
         try {
           // Fetch real IP and location
           const res = await fetch('https://ipapi.co/json/');
@@ -118,14 +147,18 @@ export function useVisitorTelemetry(currentDistrictIndex?: number) {
             const data = await res.json();
             if (!data.error) {
               geoData = {
-                ip: data.ip,
-                country_name: data.country_name,
-                country_code: data.country, // e.g. "US"
-                city: data.city || data.region,
+                ip: data.ip || 'Unknown',
+                country_name: data.country_name || null,
+                country_code: data.country || null, // e.g. "US"
+                city: data.city || data.region || null,
+                region: data.region || null,
+                latitude: typeof data.latitude === 'number' ? data.latitude : null,
+                longitude: typeof data.longitude === 'number' ? data.longitude : null,
+                timezone: data.timezone || null,
               };
             }
           }
-        } catch (e) {
+        } catch {
           // Ignore geo fetch errors
         }
 
@@ -180,13 +213,20 @@ export function useVisitorTelemetry(currentDistrictIndex?: number) {
           }
         }
 
-        // Log entry event
+        // Log entry event with full telemetry
         await logEvent('navigation', 'page_entry', {
           entryUrl,
           referrer,
           device: deviceType,
           browser,
           os,
+          ip: geoData.ip,
+          country: countryVal,
+          city: geoData.city,
+          region: geoData.region,
+          latitude: geoData.latitude,
+          longitude: geoData.longitude,
+          timezone: geoData.timezone,
         });
       } catch {
         // Graceful telemetry fallback

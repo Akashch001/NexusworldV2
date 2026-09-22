@@ -119,36 +119,6 @@ serve(async (req: Request) => {
         if (!existingConv.visitor_id && visitorId) {
           await serviceClient.from('conversations').update({ visitor_id: visitorId }).eq('id', currentConversationId);
         }
-
-        // CRITICAL: When conversation status is 'human', NORA MUST NOT respond!
-        if (convStatus === 'human' && !action && !reply) {
-          console.log(`Conversation ${currentConversationId} is in human mode. NORA silenced.`);
-          // Save visitor message to conversation transcript so Andy sees it in real time
-          const lastUserMsg = messages?.[messages.length - 1];
-          if (lastUserMsg && lastUserMsg.sender === 'user') {
-            await serviceClient.from('messages').insert({
-              conversation_id: currentConversationId,
-              user_id: userId,
-              visitor_id: visitorId,
-              role: 'user',
-              content: lastUserMsg.text
-            });
-          }
-
-          return new Response(
-            JSON.stringify({
-              response: null,
-              status: 'human',
-              humanActive: true,
-              conversationId: currentConversationId,
-              visitorId: visitorId
-            }),
-            {
-              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-              status: 200,
-            }
-          );
-        }
       } else {
         currentConversationId = null;
       }
@@ -187,6 +157,64 @@ serve(async (req: Request) => {
         currentConversationId = newConv.id;
         convStatus = newConv.status || 'ai';
       }
+    }
+
+    // Action: Explicit Human Request from Visitor
+    if (action === 'request_human') {
+      if (currentConversationId) {
+        await serviceClient
+          .from('conversations')
+          .update({
+            status: 'human_requested',
+            human_requested_at: new Date().toISOString(),
+            handoff_reason: reqBody.reason || 'Visitor requested a real person'
+          })
+          .eq('id', currentConversationId);
+      }
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          status: 'human_requested',
+          conversationId: currentConversationId,
+          visitorId: visitorId,
+          response: "I've notified our team in the Control Room that you'd like to connect with a real person. A team member will join this conversation shortly. Feel free to share any details in the meantime!"
+        }),
+        {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 200,
+        }
+      );
+    }
+
+    // CRITICAL: When conversation status is 'human', NORA MUST NOT respond!
+    if (convStatus === 'human' && !action && !reply) {
+      console.log(`Conversation ${currentConversationId} is in human mode. NORA silenced.`);
+      // Save visitor message to conversation transcript so agent sees it in real time
+      const lastUserMsg = messages?.[messages.length - 1];
+      if (lastUserMsg && (lastUserMsg.sender === 'user' || lastUserMsg.role === 'user')) {
+        await serviceClient.from('messages').insert({
+          conversation_id: currentConversationId,
+          user_id: userId,
+          visitor_id: visitorId,
+          role: 'user',
+          content: lastUserMsg.text || lastUserMsg.content
+        });
+      }
+
+      return new Response(
+        JSON.stringify({
+          response: null,
+          status: 'human',
+          humanActive: true,
+          conversationId: currentConversationId,
+          visitorId: visitorId
+        }),
+        {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 200,
+        }
+      );
     }
 
     // 2. Check Team Live Availability Presence (representative / team model)
@@ -528,7 +556,7 @@ Andy may only be mentioned when the customer explicitly asks about Andy or expli
           await serviceClient
             .from('conversations')
             .update({
-              status: isTeamOnline ? 'human_requested' : 'availability_checking',
+              status: 'human_requested',
               representative_role: targetRole,
               human_requested_at: new Date().toISOString(),
               handoff_reason: args.reason || `Handoff to ${teamLabel}`

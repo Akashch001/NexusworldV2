@@ -36,9 +36,9 @@ export const App: React.FC = () => {
 
   // Admin Neural Access Route
   const isRouteAdmin = 
-    window.location.pathname === '/admin' || 
+    window.location.pathname.startsWith('/admin') || 
     window.location.pathname === '/admin/login' || 
-    currentHash === '#/admin' || 
+    currentHash.startsWith('#/admin') || 
     currentHash === '#admin';
 
   if (isRouteAdmin) {

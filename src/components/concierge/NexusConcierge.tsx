@@ -65,6 +65,8 @@ export const NexusConcierge: React.FC<NexusConciergeProps> = ({ isOpen, onClose 
   const [activeCharacter, setActiveCharacter] = useState<NexusCharacter>('NORA');
 
   const conversationIdRef = useRef<string | null>(null);
+  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [isHumanActive, setIsHumanActive] = useState<boolean>(false);
   const hasLoadedHistoryRef = useRef<boolean>(false);
   const [viewportHeight, setViewportHeight] = useState<number | null>(null);
   const [inputVal, setInputVal] = useState<string>('');
@@ -174,6 +176,10 @@ export const NexusConcierge: React.FC<NexusConciergeProps> = ({ isOpen, onClose 
         
         if (data && data.conversation_id) {
           conversationIdRef.current = data.conversation_id;
+          setConversationId(data.conversation_id);
+          if (data.status === 'human') {
+            setIsHumanActive(true);
+          }
           if (data.messages && data.messages.length > 0) {
              const loadedMessages: ChatMessage[] = data.messages.map((m: any) => ({
                  id: m.id,
@@ -192,28 +198,33 @@ export const NexusConcierge: React.FC<NexusConciergeProps> = ({ isOpen, onClose 
     loadHistory();
   }, [isOpen]);
 
-  // Subscribe to realtime messages if conversationId is established
+  // Subscribe to realtime messages & conversation state whenever conversationId is established/updated
   useEffect(() => {
-    const convId = conversationIdRef.current;
-    if (!convId) return;
+    if (!conversationId) return;
 
-    const channel = supabase
-      .channel(`vis_concierge_${convId}`)
+    // 1. Messages Realtime Channel: receives human operator and system messages instantly
+    const msgChannel = supabase
+      .channel(`vis_concierge_${conversationId}`)
       .on(
         'postgres_changes',
         {
           event: 'INSERT',
           schema: 'public',
           table: 'messages',
-          filter: `conversation_id=eq.${convId}`,
+          filter: `conversation_id=eq.${conversationId}`,
         },
         (payload) => {
           const newMsg = payload.new as any;
-          // If human operator sent message, display to visitor in real time with operator name
-          if (newMsg && (newMsg.metadata?.sender === 'human' || newMsg.role === 'system')) {
+          // If human operator sent message or system notification
+          const isOperator = newMsg && (newMsg.metadata?.sender === 'human' || (newMsg.role === 'assistant' && Boolean(newMsg.user_id)));
+          const isSystem = newMsg && newMsg.role === 'system';
+
+          if (isOperator || isSystem) {
+            if (isOperator || newMsg.metadata?.event === 'human_joined') {
+              setIsHumanActive(true);
+            }
             setMessages((prev) => {
               if (prev.some((m) => m.id === newMsg.id)) return prev;
-              const isOperator = newMsg.metadata?.sender === 'human';
               const operatorLabel = newMsg.metadata?.sender_name || 'Nexus Team';
               return [
                 ...prev,
@@ -231,10 +242,33 @@ export const NexusConcierge: React.FC<NexusConciergeProps> = ({ isOpen, onClose 
       )
       .subscribe();
 
+    // 2. Conversation State Realtime Channel: detects when Admin claims or ends chat
+    const convChannel = supabase
+      .channel(`vis_conv_status_${conversationId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'conversations',
+          filter: `id=eq.${conversationId}`,
+        },
+        (payload) => {
+          const updated = payload.new as any;
+          if (updated?.status === 'human') {
+            setIsHumanActive(true);
+          } else if (updated?.status === 'closed') {
+            setIsHumanActive(false);
+          }
+        }
+      )
+      .subscribe();
+
     return () => {
-      channel.unsubscribe();
+      msgChannel.unsubscribe();
+      convChannel.unsubscribe();
     };
-  }, []);
+  }, [conversationId]);
 
   if (!isOpen) return null;
 
@@ -257,6 +291,10 @@ export const NexusConcierge: React.FC<NexusConciergeProps> = ({ isOpen, onClose 
       });
       if (!error && data?.conversationId) {
         conversationIdRef.current = data.conversationId;
+        setConversationId(data.conversationId);
+        if (data.status === 'human' || data.humanActive) {
+          setIsHumanActive(true);
+        }
       }
       return data;
     } catch (err) {
@@ -292,9 +330,75 @@ export const NexusConcierge: React.FC<NexusConciergeProps> = ({ isOpen, onClose 
 
     setMessages((prev) => [...prev, userMsg]);
     setInputVal('');
-    setVisualState('THINKING');
+
+    // 1. If human agent is active, bypass AI completely and write to Supabase directly
+    if (isHumanActive) {
+      const token = getOrCreateSessionToken();
+      const currentConvId = conversationIdRef.current;
+      if (currentConvId) {
+        supabase.from('messages').insert({
+          conversation_id: currentConvId,
+          visitor_id: token,
+          role: 'user',
+          content: text,
+        }).then(() => {});
+      } else {
+        syncLeadToSupabase(intelligence, text, undefined);
+      }
+      setVisualState('IDLE');
+      return;
+    }
 
     const lower = text.toLowerCase();
+
+    // 2. Check if visitor explicitly requests a real human agent
+    const isHumanHandoffRequested =
+      lower.includes('real person') ||
+      lower.includes('talk to a human') ||
+      lower.includes('speak to a human') ||
+      lower.includes('human agent') ||
+      lower.includes('human support') ||
+      lower.includes('human representative') ||
+      lower.includes('talk to a person') ||
+      lower.includes('speak to a person') ||
+      lower.includes('speak with a person');
+
+    if (isHumanHandoffRequested) {
+      setVisualState('THINKING');
+      const handoffNotice = "I've notified our team in the Control Room that you'd like to connect with a real person. A team member will join this conversation shortly. Feel free to share any details in the meantime!";
+
+      const token = getOrCreateSessionToken();
+      supabase.functions.invoke('nexus-intelligence', {
+        body: {
+          action: 'request_human',
+          reason: text,
+          visitorId: token,
+          conversationId: conversationIdRef.current,
+          messages: [...messages, userMsg],
+        }
+      }).then(({ data, error }) => {
+        if (!error && data?.conversationId) {
+          conversationIdRef.current = data.conversationId;
+          setConversationId(data.conversationId);
+        }
+      });
+
+      setTimeout(() => {
+        const aiMsg: ChatMessage = {
+          id: `ai-${Date.now()}`,
+          sender: 'ai',
+          text: handoffNotice,
+          timestamp: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+          intentBadge: 'CONSULTATION_OFFERED',
+        };
+        setMessages((prev) => [...prev, aiMsg]);
+        setVisualState('IDLE');
+      }, 500);
+
+      return;
+    }
+
+    setVisualState('THINKING');
 
     setTimeout(() => {
       setVisualState('RESPONDING');
@@ -548,6 +652,11 @@ export const NexusConcierge: React.FC<NexusConciergeProps> = ({ isOpen, onClose 
           if (error) throw error;
           if (data?.conversationId) {
             conversationIdRef.current = data.conversationId;
+            setConversationId(data.conversationId);
+          }
+          if (data?.status === 'human' || data?.humanActive) {
+            setIsHumanActive(true);
+            return null;
           }
           return data.response;
         } catch (err: any) {
@@ -559,9 +668,12 @@ export const NexusConcierge: React.FC<NexusConciergeProps> = ({ isOpen, onClose 
       };
 
       fetchAIResponse().then((realAiResponse) => {
-         if (realAiResponse) {
-             aiResponseText = realAiResponse;
+         if (!realAiResponse) {
+           setVisualState('IDLE');
+           return;
          }
+
+         aiResponseText = realAiResponse;
 
          updatedIntelligence.intent = newIntent;
          setIntelligence(updatedIntelligence);
