@@ -134,7 +134,7 @@ export const ContactSection: React.FC = () => {
             LET'S BUILD WHAT'S NEXT.
           </h2>
           <p className="mt-4 text-zinc-400 text-sm sm:text-base leading-relaxed">
-            Configure your product parameters below to generate a tailored project brief, or reach out directly to Andy Watson at{' '}
+            Configure your product parameters below to generate a tailored project brief, or reach out directly to {COMPANY_INFO.founder} at{' '}
             <a href={`mailto:${COMPANY_INFO.email}`} className="text-white hover:text-signal underline decoration-signal/50">
               {COMPANY_INFO.email}
             </a>.

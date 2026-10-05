@@ -38,7 +38,7 @@ export const COMPANY_INFO = {
   brand: "NEXUSWORLD",
   legalName: "NexusWorld Digital Systems",
   domain: "nexusworld.in",
-  founder: "Andy Watson",
+  founder: "Pronab Chakraborty",
   role: "Co-Founder",
   year: 2026,
   email: "connect@nexusworld.in",
